@@ -27,7 +27,7 @@ public class UHCGame extends tech.yfshadaow.Game implements Listener {
     private static UHCGame instance = new UHCGame((UHC) Bukkit.getPluginManager().getPlugin("UHC"));
     Scoreboard scoreboard = Bukkit.getScoreboardManager().getNewScoreboard();
     String playersRemainSuffix = "  "+ChatColor.AQUA+"剩余人数：";
-    String countdownSuffix;
+    String countdownSuffix = "abc";
     Random random;
     MultiverseCore core = new MultiverseCore();
     MVWorldManager wm = core.getMVWorldManager();
@@ -55,7 +55,7 @@ public class UHCGame extends tech.yfshadaow.Game implements Listener {
             scoreboard.getObjective("uhc").setDisplayName(ChatColor.BOLD.toString()+ChatColor.GOLD+ChatColor.BOLD+"UHC");
             scoreboard.getObjective("uhc").getScore(" ").setScore(10);
             scoreboard.getObjective("uhc").getScore(playersRemainSuffix+players.size()).setScore(9);
-            //scoreboard.getObjective("uhc").getScore(countdownSuffix+);
+            scoreboard.getObjective("uhc").getScore(countdownSuffix+"60");
             for (Player p: players) {
                 p.setScoreboard(scoreboard);
             }
