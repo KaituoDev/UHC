@@ -36,7 +36,6 @@ public class UHCGame extends tech.yfshadaow.Game implements Listener {
     int countdown2;
     String borderSuffix = "  "+RED+"边界："+GREEN;
     int borderSize;
-    Random random;
     World uhcWorld;
     Location safeSpawn;
 
@@ -78,8 +77,6 @@ public class UHCGame extends tech.yfshadaow.Game implements Listener {
             this.players.addAll(getStartingPlayers());
             removeStartButton();
             startCountdown();
-            random = new Random();
-            generateRandomWorld(random);
             spreadPlayers(players);
             initScoreboard(scoreboard.getObjective("uhc"));
             for (Player p : players) {
@@ -144,8 +141,8 @@ public class UHCGame extends tech.yfshadaow.Game implements Listener {
         }
     }
 
-    private void generateRandomWorld(Random random) {
-        uhcWorld = new WorldCreator("uhc").biomeProvider(new CustomBiomeProvider()).environment(World.Environment.NORMAL).seed(random.nextLong()).generateStructures(false).createWorld();
+    private void generateRandomWorld() {
+        uhcWorld = new WorldCreator("uhc").biomeProvider(new CustomBiomeProvider()).environment(World.Environment.NORMAL).generateStructures(false).createWorld();
         safeSpawn = getSafeSpawn(new Location(uhcWorld, 0, 64, 0));
         uhcWorld.setDifficulty(Difficulty.HARD);
         uhcWorld.setPVP(false);

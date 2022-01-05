@@ -1,5 +1,6 @@
 package games.chocola.minazukii.uhc;
 
+import org.apache.commons.io.FileUtils;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Material;
@@ -17,6 +18,7 @@ import tech.yfshadaow.PlayerChangeGameEvent;
 import static tech.yfshadaow.GameUtils.*;
 
 import java.io.File;
+import java.io.IOException;
 import java.util.ArrayList;
 
 public class UHC extends JavaPlugin implements Listener {
@@ -44,7 +46,11 @@ public class UHC extends JavaPlugin implements Listener {
         Bukkit.getScheduler().cancelTasks(this);
         HandlerList.unregisterAll((Plugin)this);
         Bukkit.unloadWorld("uhc",false);
-        new File("uhc").delete();
+        try {
+            FileUtils.deleteDirectory(new File("uhc"));
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
         if (players.size() > 0) {
             for (Player p : players) {
                 p.teleport(new Location(world, 0.5,89.0,0.5));
