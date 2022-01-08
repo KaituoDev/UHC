@@ -3,3 +3,6 @@ main: games.chocola.minazukii.uhc.UHC
 version: 0.1-DEVELOPMENT
 api-version: 1.17
 depend: [GameUtils]
+commands:
+  forceend:
+    description: force end a game
