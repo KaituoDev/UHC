@@ -1,14 +1,24 @@
 package games.chocola.minazukii.uhc;
 
+import org.apache.commons.io.FileUtils;
 import org.bukkit.*;
 import org.bukkit.block.BlockFace;
+import org.bukkit.command.Command;
+import org.bukkit.command.CommandExecutor;
+import org.bukkit.command.CommandSender;
+import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
+import org.bukkit.event.block.BlockBreakEvent;
+import org.bukkit.event.entity.CreatureSpawnEvent;
 import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.event.player.PlayerBedEnterEvent;
 import org.bukkit.event.player.PlayerRespawnEvent;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.Recipe;
+import org.bukkit.inventory.RecipeChoice;
+import org.bukkit.inventory.ShapedRecipe;
 import org.bukkit.inventory.meta.SkullMeta;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
@@ -16,36 +26,49 @@ import org.bukkit.scoreboard.DisplaySlot;
 import org.bukkit.scoreboard.Objective;
 import org.bukkit.scoreboard.Scoreboard;
 import org.bukkit.util.BoundingBox;
+import org.jetbrains.annotations.NotNull;
+import tech.yfshadaow.PlayerEndGameEvent;
 
+import java.io.File;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
-import java.util.Random;
+import java.util.UUID;
 
 import static org.bukkit.ChatColor.*;
 import static tech.yfshadaow.GameUtils.world;
 
-public class UHCGame extends tech.yfshadaow.Game implements Listener {
+public class UHCGame extends tech.yfshadaow.Game implements Listener, CommandExecutor {
     private static UHCGame instance = new UHCGame((UHC) Bukkit.getPluginManager().getPlugin("UHC"));
-    Scoreboard scoreboard = Bukkit.getScoreboardManager().getNewScoreboard();
-    String playersRemainSuffix = "  "+AQUA+"剩余人数："+GREEN;
-    String gameTimeSuffix = "  "+GRAY+"游戏时间："+GREEN;
-    int gameTime;
-    String countdownSuffix1;
-    int countdown1;
-    String countdownSuffix2;
-    int countdown2;
-    String borderSuffix = "  "+RED+"边界："+GREEN;
-    int borderSize;
-    World uhcWorld;
-    Location safeSpawn;
+    private Scoreboard scoreboard;
+    private ArrayList<Player> alive = new ArrayList<>();
+    private HashMap<NamespacedKey, Recipe> customRecipes = new HashMap<>();
+    private final String PLAYERS_REMAIN_SUFFIX = "  "+AQUA+"剩余人数："+GREEN;
+    private final String GAME_TIME_PREFIX = "  "+GRAY+"游戏时间："+GREEN;
+    private final String GRACE_PERIOD_PREFIX = "  "+LIGHT_PURPLE+"和平时间剩余："+GREEN;
+    private final String DEATH_MATCH_PREFIX = "  "+LIGHT_PURPLE+"最终决战倒计时："+GREEN;
+    private final String FINAL_HEAL_PREFIX = "  "+YELLOW+"补血倒计时："+GREEN;
+    private final String BORDER_SHRINK_PREFIX = "  "+YELLOW+"边界缩小倒计时："+GREEN;
+    private final String BORDER_PREFIX = "  "+RED+"边界："+GREEN;
+    private int gameTime;
+    private int countdown1;
+    private int countdown2;
+    private int borderSize;
+    private World uhcWorld;
+    private Location worldSpawn;
 
     private UHCGame(UHC plugin) {
         this.plugin = plugin;
+        players = UHC.players;
+        this.scoreboard = Bukkit.getScoreboardManager().getNewScoreboard();
         initGame(plugin, "UHC", 5, new Location(world, 10000, 41, 10002), BlockFace.NORTH,
                 new Location(world, 9998, 41, 10002), BlockFace.EAST,
                 new Location(world, 10000, 40, 10000), new BoundingBox(-1044, 45, -25, -983, 70, 27));
-        players = UHC.players;
-        scoreboard.registerNewObjective("uhc","dummy","UHC").setDisplaySlot(DisplaySlot.SIDEBAR);
+        alive.addAll(players);
+        initCustomRecipe();
+        scoreboard.registerNewObjective("uhcMain","dummy","UHC").setDisplaySlot(DisplaySlot.SIDEBAR);
+        scoreboard.registerNewObjective("uhcKills","playerKillCount","UHC Kills").setDisplaySlot(DisplaySlot.PLAYER_LIST);
     }
 
     @Override
@@ -62,41 +85,101 @@ public class UHCGame extends tech.yfshadaow.Game implements Listener {
         *       Make the center (0,0), spreading 1000 blocks far
         *    7) Init scoreboard (Using {@link #initScoreboard})
         *       I. UHC (title)
-        *       II. >---------------<
-        *       III. Players remain: 10
-        *       IV. (empty line)
-        *       V. Game Time: 0s
-        *       VI. Grace Period remain: 300s -> Death Match in: 120s -> Death Match!
-        *       VII. Final Heal in: 120s -> Border Shrink in: 120s -> Go to (0,0)! -> Live or die!
-        *       VIII. (empty line)
-        *       IX. Border: 1000 --(gradually in 480s)--> 200 -> 20
-        *       X. >---------------<
-        *    8) ...
+        *       II. >---------------< [9]
+        *       III. Players remain: 10 [8]
+        *       IV. (empty line) [7]
+        *       V. Game Time: 0s [6]
+        *       VI. Grace Period remain: 300s -> Death Match in: 120s -> Death Match! [5]
+        *       VII. Final Heal in: 120s -> Border Shrink in: 120s -> Go to (0,0)! [4]
+        *       VIII. (empty line) [3]
+        *       IX. Border: 1000 --(gradually in 180s)--> 64 [2]
+        *       X. >---------------< [1]
+        *    8) Countdowns (Using {@link #updateScoreboard})
+        *    9) Check if end (Using {@code @EventHandler{@link #onPlayerDies}} and time limit)
         */
         gameRunnable = () -> {
             this.players.addAll(getStartingPlayers());
             removeStartButton();
+            generateRandomWorld();
             startCountdown();
-            spreadPlayers(players);
-            initScoreboard(scoreboard.getObjective("uhc"));
-            for (Player p : players) {
-                p.setScoreboard(scoreboard);
-            }
-            Bukkit.getScheduler().scheduleSyncRepeatingTask(plugin, () -> {
-                updateScoreboard(scoreboard.getObjective("uhc"));
-            }, 20, 20);
+            Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                        spreadPlayers(players);
+                        initScoreboard(scoreboard.getObjective("uhcMain"));
+                        for (Player p : players) {
+                            p.setScoreboard(scoreboard);
+                        }
+            }, 100);
+            taskIds.add(Bukkit.getScheduler().scheduleSyncRepeatingTask(plugin, () -> updateScoreboard(scoreboard.getObjective("uhcMain")), 120, 20));
+            taskIds.add(Bukkit.getScheduler().scheduleSyncRepeatingTask(plugin, () -> {
+                if (uhcWorld.getWorldBorder().getSize() > 64) {
+                    uhcWorld.getWorldBorder().setSize(uhcWorld.getWorldBorder().getSize() - 0.26);
+                }
+            }, 4920, 1));
+            taskIds.add(Bukkit.getScheduler().scheduleSyncDelayedTask(plugin, () -> players.forEach((p) -> p.sendMessage(" 5分钟将强制结束游戏！届时所有存活玩家都会成为胜利者！")), 18000));
+            taskIds.add(Bukkit.getScheduler().scheduleSyncDelayedTask(plugin, () -> endGame(), 24000));
         };
     }
 
-    private void updateScoreboard(Objective o) {
+    private void initScoreboard(Objective o) {
+        o.setDisplayName(BOLD.toString()+GOLD+BOLD+"UHC"); //UHC
+        o.getScore(DARK_GRAY+">---------------<").setScore(9); //>---------------<
+        o.getScore(PLAYERS_REMAIN_SUFFIX +alive.size()).setScore(8); //>>Players remain:
+        o.getScore(" ").setScore(7); //
+        gameTime = 0;
+        o.getScore(GAME_TIME_PREFIX +gameTime).setScore(6); //Game Time:
+        countdown1 = 300;
+        o.getScore(GRACE_PERIOD_PREFIX +countdown1).setScore(5); //Grace Period remain:
+        countdown2 = 120;
+        o.getScore(FINAL_HEAL_PREFIX +countdown2).setScore(4);
+        o.getScore("  ").setScore(3);
+        borderSize = 1000;
+        o.getScore(BORDER_PREFIX +borderSize).setScore(2);
+        o.getScore(DARK_GRAY+">---------------< ").setScore(1);
+    }
 
+    private void updateScoreboard(Objective o) {
+        o.getScoreboard().resetScores(GAME_TIME_PREFIX +gameTime);
+        gameTime++;
+        o.getScore(GAME_TIME_PREFIX+gameTime).setScore(6);
+        if (o.getScore(GRACE_PERIOD_PREFIX+countdown1).isScoreSet()) {
+            o.getScoreboard().resetScores(GRACE_PERIOD_PREFIX+countdown1);
+            if (--countdown1 == 0) {
+                countdown1 = 120;
+                o.getScore(DEATH_MATCH_PREFIX+countdown1).setScore(5);
+            } else {
+                o.getScore(GRACE_PERIOD_PREFIX+countdown1).setScore(5);
+            }
+        } else if (o.getScore(DEATH_MATCH_PREFIX+countdown1).isScoreSet()) {
+            o.getScoreboard().resetScores(DEATH_MATCH_PREFIX + countdown1);
+            if (--countdown1 == 0) {
+                o.getScore("  " + LIGHT_PURPLE + "最终决战！").setScore(5);
+            } else {
+                o.getScore(DEATH_MATCH_PREFIX + countdown1).setScore(5);
+            }
+        }
+        if (o.getScore(FINAL_HEAL_PREFIX+countdown2).isScoreSet()) {
+            o.getScoreboard().resetScores(FINAL_HEAL_PREFIX+countdown2);
+            if (--countdown2 == 0) {
+                countdown2 = 120;
+                o.getScore(BORDER_SHRINK_PREFIX+countdown2).setScore(4);
+            } else {
+                o.getScore(FINAL_HEAL_PREFIX+countdown2).setScore(4);
+            }
+        } else if (o.getScore(BORDER_SHRINK_PREFIX+countdown2).isScoreSet()) {
+            o.getScoreboard().resetScores(BORDER_SHRINK_PREFIX+countdown2);
+            if (--countdown2 == 0) {
+                o.getScore("  " + YELLOW + "快去中心点！").setScore(4);
+            } else {
+                o.getScore(BORDER_SHRINK_PREFIX+countdown2).setScore(4);
+            }
+        }
     }
 
     @EventHandler
     public void onPlayerDies(PlayerDeathEvent pde) {
         if (pde.getEntity() instanceof Player) {
             Player death = (Player) pde.getEntity();
-            if (players.contains(death)) {
+            if (alive.contains(death)) {
                 ItemStack head = new ItemStack(Material.PLAYER_HEAD);
                 try {
                     SkullMeta headMeta = (SkullMeta) head.getItemMeta();
@@ -109,9 +192,12 @@ public class UHCGame extends tech.yfshadaow.Game implements Listener {
                 for (Player p: players) {
                     p.sendMessage(death.getName()+"被"+death.getKiller().getName()+"淘汰了！");
                 }
-                scoreboard.getObjective("uhc").getScore(playersRemainSuffix+players.size()).setScore(0);
-                players.remove(death);
-                scoreboard.getObjective("uhc").getScore(playersRemainSuffix+players.size()).setScore(9);
+                scoreboard.resetScores(PLAYERS_REMAIN_SUFFIX +alive.size());
+                alive.remove(death);
+                scoreboard.getObjective("uhcMain").getScore(PLAYERS_REMAIN_SUFFIX +alive.size()).setScore(8);
+                if (players.size() == 1) {
+                    endGame();
+                }
             }
         }
     }
@@ -132,18 +218,62 @@ public class UHCGame extends tech.yfshadaow.Game implements Listener {
         }
     }
 
+    @EventHandler
+    public void onBlockBreak(BlockBreakEvent bbe) {
+        if (bbe.getBlock().getLocation().getWorld().getName().equals("uhc")) {
+            switch (bbe.getBlock().getType()) {
+                case IRON_ORE:
+                    bbe.setDropItems(false);
+                    uhcWorld.dropItem(bbe.getBlock().getLocation(), new ItemStack(Material.IRON_INGOT));
+                    bbe.setExpToDrop(3);
+                    break;
+                case GOLD_ORE:
+                    bbe.setDropItems(false);
+                    uhcWorld.dropItem(bbe.getBlock().getLocation(), new ItemStack(Material.GOLD_INGOT));
+                    bbe.setExpToDrop(3);
+                    break;
+                case OAK_LEAVES:
+                case DARK_OAK_LEAVES:
+                    if (!bbe.getPlayer().getInventory().getItemInMainHand().getType().equals(Material.SHEARS)) {break;}
+                    if (random.nextInt(100) < 5) {
+                        uhcWorld.dropItem(bbe.getBlock().getLocation(), new ItemStack(Material.APPLE));
+                    }
+                    break;
+                case BIRCH_LEAVES:
+                case JUNGLE_LEAVES:
+                case SPRUCE_LEAVES:
+                case ACACIA_LEAVES:
+                case AZALEA_LEAVES:
+                case FLOWERING_AZALEA_LEAVES:
+                    if (random.nextInt(100) < 3) {
+                        uhcWorld.dropItem(bbe.getBlock().getLocation(), new ItemStack(Material.APPLE));
+                    }
+                    break;
+            }
+        }
+    }
+
+    @EventHandler
+    public void onEntitySpawn(CreatureSpawnEvent cse) {
+        if (cse.getEntity().getLocation().getWorld().getName().equals("uhc") && cse.getSpawnReason().equals(CreatureSpawnEvent.SpawnReason.NATURAL)) {
+            if (random.nextInt(100) < 25) {
+                cse.setCancelled(true);
+            }
+        }
+    }
+
     private void spreadPlayers(List<Player> players) {
         for (Player p: players) {
             p.setGameMode(GameMode.SURVIVAL);
-            p.setBedSpawnLocation(safeSpawn, true);
-            p.addPotionEffect(new PotionEffect(PotionEffectType.DAMAGE_RESISTANCE, 10, 30));
-            p.teleport(getSafeSpawn(new Location(uhcWorld, random.nextInt(1000)-500,64,random.nextInt(1000)-500)));
+            p.setBedSpawnLocation(worldSpawn, true);
+            p.addPotionEffect(new PotionEffect(PotionEffectType.DAMAGE_RESISTANCE, 200, 30));
+            p.teleport(new Location(uhcWorld, random.nextInt(1000)-500,100,random.nextInt(1000)-500));
         }
     }
 
     private void generateRandomWorld() {
-        uhcWorld = new WorldCreator("uhc").biomeProvider(new CustomBiomeProvider()).environment(World.Environment.NORMAL).generateStructures(false).createWorld();
-        safeSpawn = getSafeSpawn(new Location(uhcWorld, 0, 64, 0));
+        uhcWorld = new WorldCreator("uhc").generator("Terra:DEFAULT").biomeProvider(new CustomBiomeProvider()).environment(World.Environment.NORMAL).generateStructures(false).createWorld();
+        worldSpawn = new Location(uhcWorld, 0, 100, 0);
         uhcWorld.setDifficulty(Difficulty.HARD);
         uhcWorld.setPVP(false);
         uhcWorld.setGameRule(GameRule.NATURAL_REGENERATION, false);
@@ -156,39 +286,62 @@ public class UHCGame extends tech.yfshadaow.Game implements Listener {
         uhcWorld.getWorldBorder().setCenter(new Location(uhcWorld, 0, 64, 0));
     }
 
-    private void initScoreboard(Objective o) {
-        o.setDisplayName(BOLD.toString()+GOLD+BOLD+"UHC"); //UHC
-        o.getScore(DARK_GRAY+">---------------<").setScore(9); //>---------------<
-        o.getScore(playersRemainSuffix+players.size()).setScore(8); //>>Players remain:
-        o.getScore(" ").setScore(7); //
-        gameTime = 0;
-        o.getScore(gameTimeSuffix+gameTime).setScore(6); //Game Time:
-        countdownSuffix1 = "  "+LIGHT_PURPLE+"和平时间剩余："+GREEN;
-        countdown1 = 300;
-        o.getScore(countdownSuffix1+countdown1).setScore(5); //Grace Period remain:
-        countdownSuffix2 = "  "+YELLOW+"补血倒计时："+GREEN;
-        countdown2 = 120;
-        o.getScore(countdownSuffix2+countdown2).setScore(4);
-        o.getScore("  ").setScore(3);
-        borderSize = 1000;
-        o.getScore(borderSuffix+borderSize).setScore(2);
-        o.getScore(DARK_GRAY+">---------------< ").setScore(1);
-    }
-
-    private Location getSafeSpawn(Location l) {
-        Location res = l;
-        while (!(res.getBlock().isPassable() && new Location(uhcWorld, res.getX(), res.getY()-1, res.getZ()).getBlock().getType().equals(Material.GRASS_BLOCK))) {
-            if (new Location(uhcWorld, res.getX(), res.getY()-1, res.getZ()).getBlock().isLiquid()) {
-                res = new Location(uhcWorld, res.getX()-1, 64, res.getZ());
-            } else if (new Location(uhcWorld, res.getX(), res.getY()-1, res.getZ()).getBlock().isPassable()) {
-                res = new Location(uhcWorld, res.getX(), res.getY()-1, res.getZ());
-            } else if (res.getY() < 60) {
-                res = new Location(uhcWorld, res.getX()+1, 64, res.getZ());
-            } else {
-                res = new Location(uhcWorld, res.getX(), res.getY()+1, res.getZ());
-            }
-        }
-        return res;
+    private void initCustomRecipe() {
+        ItemStack temp;
+        NamespacedKey key;
+        Recipe recipe;
+        //wooden axe
+        temp = new ItemStack(Material.WOODEN_AXE);
+        temp.addEnchantment(Enchantment.DIG_SPEED, 1);
+        temp.addEnchantment(Enchantment.DURABILITY, 1);
+        key = new NamespacedKey(plugin, "wooden_axe");
+        recipe = new ShapedRecipe(key, temp).
+                shape("xx","xy"," y").
+                setIngredient('x', new RecipeChoice.MaterialChoice(Tag.PLANKS)).
+                setIngredient('y', Material.STICK);
+        customRecipes.put(key, recipe);
+        Bukkit.addRecipe(recipe);
+        //wooden pickaxe
+        temp = new ItemStack(Material.WOODEN_PICKAXE);
+        temp.addEnchantment(Enchantment.DIG_SPEED, 1);
+        temp.addEnchantment(Enchantment.DURABILITY, 1);
+        key = new NamespacedKey(plugin, "wooden_pickaxe");
+        recipe = new ShapedRecipe(key, temp).
+                shape("xxx"," y "," y ").
+                setIngredient('x', new RecipeChoice.MaterialChoice(Tag.PLANKS)).
+                setIngredient('y', Material.STICK);
+        customRecipes.put(key, recipe);
+        Bukkit.addRecipe(recipe);
+        //wooden shovel
+        temp = new ItemStack(Material.WOODEN_SHOVEL);
+        temp.addEnchantment(Enchantment.DIG_SPEED, 1);
+        temp.addEnchantment(Enchantment.DURABILITY, 1);
+        key = new NamespacedKey(plugin, "wooden_shovel");
+        recipe = new ShapedRecipe(key, temp).
+                shape("x","y","y").
+                setIngredient('x', new RecipeChoice.MaterialChoice(Tag.PLANKS)).
+                setIngredient('y', Material.STICK);
+        customRecipes.put(key, recipe);
+        Bukkit.addRecipe(recipe);
+        //wooden sword
+        temp = new ItemStack(Material.WOODEN_SWORD);
+        temp.addEnchantment(Enchantment.DAMAGE_ALL, 1);
+        temp.addEnchantment(Enchantment.DURABILITY, 1);
+        key = new NamespacedKey(plugin, "wooden_axe");
+        recipe = new ShapedRecipe(key, temp).
+                shape("x","x","y").
+                setIngredient('x', new RecipeChoice.MaterialChoice(Tag.PLANKS)).
+                setIngredient('y', Material.STICK);
+        customRecipes.put(key, recipe);
+        Bukkit.addRecipe(recipe);
+        //string
+        temp = new ItemStack(Material.STRING);
+        key = new NamespacedKey(plugin, "string");
+        recipe = new ShapedRecipe(key, temp).
+                shape("xx","xx").
+                setIngredient('x', new RecipeChoice.MaterialChoice(Tag.WOOL));
+        customRecipes.put(key, recipe);
+        Bukkit.addRecipe(recipe);
     }
 
     @Override
@@ -203,5 +356,76 @@ public class UHCGame extends tech.yfshadaow.Game implements Listener {
 
     public static UHCGame getInstance() {
         return instance;
+    }
+
+    private void endGame() {
+        StringBuilder winner = new StringBuilder();
+        winner.append(" "+GOLD);
+        for (Player p: alive) {
+            winner.append(p.getName()+WHITE);
+            if (alive.indexOf(p) != alive.size()-1) {
+                winner.append(", "+GOLD);
+            }
+        }
+        winner.append("获得胜利！");
+        StringBuilder mvp = new StringBuilder();
+        mvp.append(" "+AQUA);
+        mvp.append(players.get(0).getName()+WHITE);
+        int maxKill = scoreboard.getObjective("uhcKills").getScore(players.get(0).getName()).getScore();
+        for (Player p: players) {
+            if (scoreboard.getObjective("uhcKills").getScore(p.getName()).getScore() > maxKill) {
+                maxKill = scoreboard.getObjective("uhcKills").getScore(p.getName()).getScore();
+                mvp = new StringBuilder();
+                mvp.append(" "+AQUA);
+                mvp.append(p.getName()+WHITE);
+            } else if (scoreboard.getObjective("uhcKills").getScore(p.getName()).getScore() == maxKill) {
+                if (players.indexOf(p) != 0) {
+                    mvp.append(", "+AQUA+p.getName()+WHITE);
+                }
+            }
+        }
+        mvp.append("以");
+        mvp.append(maxKill);
+        mvp.append("杀拿下最多人头！");
+        for (Player p: players) {
+            p.sendMessage(winner.toString());
+            p.sendMessage(mvp.toString());
+            p.teleport(hubLocation);
+            Bukkit.getPluginManager().callEvent(new PlayerEndGameEvent(p, this));
+        }
+        players.clear();
+        alive.clear();
+        Bukkit.unloadWorld("uhc",false);
+        UHCGame.getInstance().unregisterScoreboard();
+        try {
+            FileUtils.deleteDirectory(new File("uhc"));
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        List<Integer> taskIdsCopy = new ArrayList<>(taskIds);
+        taskIds.clear();
+        for (int i : taskIdsCopy) {
+            Bukkit.getScheduler().cancelTask(i);
+        }
+    }
+
+    @Override
+    public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String alias, @NotNull String[] args) {
+        if (command.getName().equals("forceend")) {
+            if (!sender.isOp()) {return false;}
+            if (!(sender instanceof Player)) {return false;}
+            if (args.length != 1) {return false;}
+            if (args[0].equals("UHC")) {
+                endGame();
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public void unregisterScoreboard() {
+        for (Objective o: scoreboard.getObjectives()) {
+            o.unregister();
+        }
     }
 }

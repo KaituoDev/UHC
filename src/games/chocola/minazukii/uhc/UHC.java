@@ -38,6 +38,7 @@ public class UHC extends JavaPlugin implements Listener {
         players = new ArrayList<>();
         Bukkit.getPluginManager().registerEvents(this, this);
         Bukkit.getPluginManager().registerEvents(UHCGame.getInstance(), this);
+        getCommand("forceend").setExecutor(UHCGame.getInstance());
         registerGame(UHCGame.getInstance());
     }
 
@@ -46,6 +47,7 @@ public class UHC extends JavaPlugin implements Listener {
         Bukkit.getScheduler().cancelTasks(this);
         HandlerList.unregisterAll((Plugin)this);
         Bukkit.unloadWorld("uhc",false);
+        UHCGame.getInstance().unregisterScoreboard();
         try {
             FileUtils.deleteDirectory(new File("uhc"));
         } catch (IOException e) {
