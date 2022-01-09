@@ -54,7 +54,7 @@ public class UHCGame extends tech.yfshadaow.Game implements Listener, CommandExe
     private int gameTime;
     private int countdown1;
     private int countdown2;
-    private int borderSize;
+    private long borderSize;
     private World uhcWorld;
     private Location worldSpawn;
 
@@ -65,10 +65,8 @@ public class UHCGame extends tech.yfshadaow.Game implements Listener, CommandExe
         initGame(plugin, "UHC", 5, new Location(world, 10000, 41, 10002), BlockFace.NORTH,
                 new Location(world, 9998, 41, 10002), BlockFace.EAST,
                 new Location(world, 10000, 40, 10000), new BoundingBox(-1044, 45, -25, -983, 70, 27));
-        alive.addAll(players);
-        initCustomRecipe();
-        scoreboard.registerNewObjective("uhcMain","dummy","UHC").setDisplaySlot(DisplaySlot.SIDEBAR);
-        scoreboard.registerNewObjective("uhcKills","playerKillCount","UHC Kills").setDisplaySlot(DisplaySlot.PLAYER_LIST);
+        //initCustomRecipe();
+        registerScoreboard();
     }
 
     @Override
@@ -99,6 +97,7 @@ public class UHCGame extends tech.yfshadaow.Game implements Listener, CommandExe
         */
         gameRunnable = () -> {
             this.players.addAll(getStartingPlayers());
+            alive.addAll(players);
             removeStartButton();
             generateRandomWorld();
             startCountdown();
@@ -109,13 +108,24 @@ public class UHCGame extends tech.yfshadaow.Game implements Listener, CommandExe
                             p.setScoreboard(scoreboard);
                         }
             }, 100);
+            taskIds.add(Bukkit.getScheduler().scheduleSyncDelayedTask(plugin, () -> {
+                for (Player p: alive) {
+                    p.addPotionEffect(new PotionEffect(PotionEffectType.HEAL, 1, 5));
+                }
+            }, 2400));
+            taskIds.add(Bukkit.getScheduler().scheduleSyncDelayedTask(plugin, () -> {
+                uhcWorld.setPVP(true);
+            }, 6000));
             taskIds.add(Bukkit.getScheduler().scheduleSyncRepeatingTask(plugin, () -> updateScoreboard(scoreboard.getObjective("uhcMain")), 120, 20));
             taskIds.add(Bukkit.getScheduler().scheduleSyncRepeatingTask(plugin, () -> {
                 if (uhcWorld.getWorldBorder().getSize() > 64) {
                     uhcWorld.getWorldBorder().setSize(uhcWorld.getWorldBorder().getSize() - 0.26);
+                    scoreboard.resetScores(BORDER_PREFIX+borderSize);
+                    borderSize = Math.round(uhcWorld.getWorldBorder().getSize());
+                    scoreboard.getObjective("uhcMain").getScore(BORDER_PREFIX+borderSize).setScore(2);
                 }
             }, 4920, 1));
-            taskIds.add(Bukkit.getScheduler().scheduleSyncDelayedTask(plugin, () -> players.forEach((p) -> p.sendMessage(" 5分钟将强制结束游戏！届时所有存活玩家都会成为胜利者！")), 18000));
+            taskIds.add(Bukkit.getScheduler().scheduleSyncDelayedTask(plugin, () -> players.forEach((p) -> p.sendMessage(" "+YELLOW+"5分钟后将强制结束游戏！届时所有存活玩家都会成为胜利者！")), 18000));
             taskIds.add(Bukkit.getScheduler().scheduleSyncDelayedTask(plugin, () -> endGame(), 24000));
         };
     }
@@ -180,6 +190,7 @@ public class UHCGame extends tech.yfshadaow.Game implements Listener, CommandExe
         if (pde.getEntity() instanceof Player) {
             Player death = (Player) pde.getEntity();
             if (alive.contains(death)) {
+                death.setGameMode(GameMode.SPECTATOR);
                 ItemStack head = new ItemStack(Material.PLAYER_HEAD);
                 try {
                     SkullMeta headMeta = (SkullMeta) head.getItemMeta();
@@ -190,22 +201,15 @@ public class UHCGame extends tech.yfshadaow.Game implements Listener, CommandExe
                 }
                 uhcWorld.dropItem(pde.getEntity().getLocation(), head);
                 for (Player p: players) {
-                    p.sendMessage(death.getName()+"被"+death.getKiller().getName()+"淘汰了！");
+                    p.sendMessage(death.getName()+"被"+(death.getKiller() == null ? "" : death.getKiller().getName())+"淘汰了！");
                 }
                 scoreboard.resetScores(PLAYERS_REMAIN_SUFFIX +alive.size());
                 alive.remove(death);
                 scoreboard.getObjective("uhcMain").getScore(PLAYERS_REMAIN_SUFFIX +alive.size()).setScore(8);
-                if (players.size() == 1) {
+                if (alive.size() <= 1) {
                     endGame();
                 }
             }
-        }
-    }
-
-    @EventHandler
-    public void onPlayerRespawn(PlayerRespawnEvent pre) {
-        if (pre.getPlayer().getWorld().getName().equals("uhc")) {
-            pre.getPlayer().setGameMode(GameMode.SPECTATOR);
         }
     }
 
@@ -223,18 +227,24 @@ public class UHCGame extends tech.yfshadaow.Game implements Listener, CommandExe
         if (bbe.getBlock().getLocation().getWorld().getName().equals("uhc")) {
             switch (bbe.getBlock().getType()) {
                 case IRON_ORE:
+                case DEEPSLATE_IRON_ORE:
                     bbe.setDropItems(false);
                     uhcWorld.dropItem(bbe.getBlock().getLocation(), new ItemStack(Material.IRON_INGOT));
                     bbe.setExpToDrop(3);
                     break;
                 case GOLD_ORE:
+                case DEEPSLATE_GOLD_ORE:
                     bbe.setDropItems(false);
                     uhcWorld.dropItem(bbe.getBlock().getLocation(), new ItemStack(Material.GOLD_INGOT));
                     bbe.setExpToDrop(3);
                     break;
                 case OAK_LEAVES:
                 case DARK_OAK_LEAVES:
-                    if (!bbe.getPlayer().getInventory().getItemInMainHand().getType().equals(Material.SHEARS)) {break;}
+                    if (!bbe.getPlayer().getInventory().getItemInMainHand().getType().equals(Material.SHEARS)) {
+                        if (random.nextInt(100) < 3) {
+                            uhcWorld.dropItem(bbe.getBlock().getLocation(), new ItemStack(Material.APPLE));
+                        }
+                    }
                     if (random.nextInt(100) < 5) {
                         uhcWorld.dropItem(bbe.getBlock().getLocation(), new ItemStack(Material.APPLE));
                     }
@@ -396,7 +406,7 @@ public class UHCGame extends tech.yfshadaow.Game implements Listener, CommandExe
         players.clear();
         alive.clear();
         Bukkit.unloadWorld("uhc",false);
-        UHCGame.getInstance().unregisterScoreboard();
+        refreshScoreboard();
         try {
             FileUtils.deleteDirectory(new File("uhc"));
         } catch (IOException e) {
@@ -421,6 +431,17 @@ public class UHCGame extends tech.yfshadaow.Game implements Listener, CommandExe
             }
         }
         return false;
+    }
+
+    private void refreshScoreboard() {
+        unregisterScoreboard();
+        registerScoreboard();
+    }
+
+
+    private void registerScoreboard() {
+        scoreboard.registerNewObjective("uhcMain","dummy","UHC").setDisplaySlot(DisplaySlot.SIDEBAR);
+        scoreboard.registerNewObjective("uhcKills","playerKillCount","UHC Kills").setDisplaySlot(DisplaySlot.PLAYER_LIST);
     }
 
     public void unregisterScoreboard() {
