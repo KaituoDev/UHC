@@ -20,6 +20,7 @@ import static tech.yfshadaow.GameUtils.*;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Objects;
 
 public class UHC extends JavaPlugin implements Listener {
     static ArrayList<Player> players;
@@ -27,7 +28,7 @@ public class UHC extends JavaPlugin implements Listener {
     @EventHandler
     public void onButtonClicked(PlayerInteractEvent pie) {
         if (pie.getAction().equals(Action.RIGHT_CLICK_BLOCK) &&
-                pie.getClickedBlock().getType().equals(Material.OAK_BUTTON) &&
+                Objects.requireNonNull(pie.getClickedBlock()).getType().equals(Material.OAK_BUTTON) &&
                 pie.getClickedBlock().getLocation().equals(new Location(world, 10000, 41, 10002))) {
             UHCGame.getInstance().startGame();
         }
@@ -38,16 +39,16 @@ public class UHC extends JavaPlugin implements Listener {
         players = new ArrayList<>();
         Bukkit.getPluginManager().registerEvents(this, this);
         Bukkit.getPluginManager().registerEvents(UHCGame.getInstance(), this);
-        getCommand("forceend").setExecutor(UHCGame.getInstance());
+        Objects.requireNonNull(getCommand("forceend")).setExecutor(UHCGame.getInstance());
         registerGame(UHCGame.getInstance());
     }
 
     @Override
     public void onDisable() {
         Bukkit.getScheduler().cancelTasks(this);
-        HandlerList.unregisterAll((Plugin)this);
-        Bukkit.unloadWorld("uhc",false);
-        UHCGame.getInstance().unregisterScoreboard();
+        HandlerList.unregisterAll((Plugin) this);
+        Bukkit.unloadWorld("uhc", false);
+        UHCGame.getInstance().onDisable();
         try {
             FileUtils.deleteDirectory(new File("uhc"));
         } catch (IOException e) {
@@ -55,7 +56,7 @@ public class UHC extends JavaPlugin implements Listener {
         }
         if (players.size() > 0) {
             for (Player p : players) {
-                p.teleport(new Location(world, 0.5,89.0,0.5));
+                p.teleport(new Location(world, 0.5, 89.0, 0.5));
                 Bukkit.getPluginManager().callEvent(new PlayerChangeGameEvent(p, UHCGame.getInstance(), null));
             }
         }
