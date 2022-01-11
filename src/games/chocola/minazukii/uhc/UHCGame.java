@@ -7,6 +7,7 @@ import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.enchantments.Enchantment;
+import org.bukkit.entity.Monster;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
@@ -37,6 +38,31 @@ import java.util.Objects;
 
 import static org.bukkit.ChatColor.*;
 import static tech.yfshadaow.GameUtils.world;
+
+    /**
+     Basic Logic:
+     1. Initialization
+         1) Add hub players to players list (Get from super method {@link tech.yfshadaow.Game#getStartingPlayers})
+         2) Remove start button (Super method {@link tech.yfshadaow.Game#removeStartButton})
+         3) Starting countdown (Super method {@link tech.yfshadaow.Game#startCountdown})
+         4) Init randomizer
+         5) Init UHC world (Using {@link #generateRandomWorld})
+         6) Spread players (Using {@link #spreadPlayers})
+         Make the center (0,0), spreading 1000 blocks far
+         7) Init scoreboard (Using {@link #initScoreboard})
+             I. UHC (title)
+             II. >---------------< [9]
+             III. Players remain: 10 [8]
+             IV. (empty line) [7]
+             V. Game Time: 0s [6]
+             VI. Grace Period remain: 300s -> Death Match in: 120s -> Death Match! [5]
+             VII. Final Heal in: 120s -> Border Shrink in: 120s -> Go to (0,0)! [4]
+             VIII. (empty line) [3]
+             IX. Border: 1000 --(gradually in 180s)--> 64 [2]
+             X. >---------------< [1]
+     2. Countdowns (Using {@link #updateScoreboard})
+     3. Check if end (Using {@code @EventHandler{@link #onPlayerDies}} and time limit)
+     */
 
 public class UHCGame extends tech.yfshadaow.Game implements Listener, CommandExecutor {
     private static final UHCGame instance = new UHCGame((UHC) Bukkit.getPluginManager().getPlugin("UHC"));
@@ -74,30 +100,6 @@ public class UHCGame extends tech.yfshadaow.Game implements Listener, CommandExe
 
     @Override
     public void initGameRunnable() {
-        /*
-         Basic Logic:
-         1. Initialization
-         1) Add hub players to players list (Get from super method {@link tech.yfshadaow.Game#getStartingPlayers})
-         2) Remove start button (Super method {@link tech.yfshadaow.Game#removeStartButton})
-         3) Starting countdown (Super method {@link tech.yfshadaow.Game#startCountdown})
-         4) Init randomizer
-         5) Init UHC world (Using {@link #generateRandomWorld})
-         6) Spread players (Using {@link #spreadPlayers})
-         Make the center (0,0), spreading 1000 blocks far
-         7) Init scoreboard (Using {@link #initScoreboard})
-         I. UHC (title)
-         II. >---------------< [9]
-         III. Players remain: 10 [8]
-         IV. (empty line) [7]
-         V. Game Time: 0s [6]
-         VI. Grace Period remain: 300s -> Death Match in: 120s -> Death Match! [5]
-         VII. Final Heal in: 120s -> Border Shrink in: 120s -> Go to (0,0)! [4]
-         VIII. (empty line) [3]
-         IX. Border: 1000 --(gradually in 180s)--> 64 [2]
-         X. >---------------< [1]
-         8) Countdowns (Using {@link #updateScoreboard})
-         9) Check if end (Using {@code @EventHandler{@link #onPlayerDies}} and time limit)
-         */
         gameRunnable = () -> {
             this.players.addAll(getStartingPlayers());
             alive.addAll(players);
@@ -265,8 +267,14 @@ public class UHCGame extends tech.yfshadaow.Game implements Listener, CommandExe
     @EventHandler
     public void onEntitySpawn(CreatureSpawnEvent cse) {
         if (Objects.requireNonNull(cse.getEntity().getLocation().getWorld()).getName().equals("uhc") && cse.getSpawnReason().equals(CreatureSpawnEvent.SpawnReason.NATURAL)) {
-            if (random.nextInt(100) < 25) {
-                cse.setCancelled(true);
+            if (cse.getEntity() instanceof Monster) {
+                if (random.nextInt(100) < 25) {
+                    cse.setCancelled(true);
+                }
+            } else {
+                if (random.nextInt(100) < 5) {
+                    cse.setCancelled(true);
+                }
             }
         }
     }
