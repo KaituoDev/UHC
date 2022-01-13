@@ -19,6 +19,7 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.Recipe;
 import org.bukkit.inventory.RecipeChoice;
 import org.bukkit.inventory.ShapedRecipe;
+import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.inventory.meta.SkullMeta;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
@@ -55,8 +56,8 @@ import static tech.yfshadaow.GameUtils.world;
              III. Players remain: 10 [8]
              IV. (empty line) [7]
              V. Game Time: 0s [6]
-             VI. Grace Period remain: 300s -> Death Match in: 120s -> Death Match! [5]
-             VII. Final Heal in: 120s -> Border Shrink in: 120s -> Go to (0,0)! [4]
+             VI. Grace Period remain: 600s -> Death Match in: 2000s -> Death Match! [5]
+             VII. Final Heal in: 300s -> Border Shrink in: 300s -> Go to (0,0)! [4]
              VIII. (empty line) [3]
              IX. Border: 1000 --(gradually in 180s)--> 64 [2]
              X. >---------------< [1]
@@ -74,11 +75,14 @@ public class UHCGame extends tech.yfshadaow.Game implements Listener, CommandExe
     private final String GRACE_PERIOD_PREFIX = "  " + LIGHT_PURPLE + "和平时间剩余：" + GREEN;
     private final String DEATH_MATCH_PREFIX = "  " + LIGHT_PURPLE + "最终决战倒计时：" + GREEN;
     private final String FINAL_HEAL_PREFIX = "  " + YELLOW + "补血倒计时：" + GREEN;
-    private final String BORDER_SHRINK_PREFIX = "  " + YELLOW + "边界缩小倒计时：" + GREEN;
-    private final String BORDER_PREFIX = "  " + RED + "边界：" + GREEN;
-    private int gameTime;
-    private int countdown1;
-    private int countdown2;
+    private final String BORDER_SHRINK_PREFIX = "  " + YELLOW + "边界缩小中！结束倒计时：" + GREEN;
+    private final String BORDER_PREFIX = "  " + RED + "边界大小：" + GREEN;
+    private final long GRACE_PERIOD = 600; //in seconds
+    private final long FINAL_HEAL = 300;
+    private final long BORDER_SHRINK_IN = 600;
+    private long gameTime;
+    private long countdown1;
+    private long countdown2;
     private long borderSize;
     private World uhcWorld;
     private Location worldSpawn;
@@ -117,19 +121,19 @@ public class UHCGame extends tech.yfshadaow.Game implements Listener, CommandExe
                 for (Player p : alive) {
                     p.addPotionEffect(new PotionEffect(PotionEffectType.HEAL, 1, 5));
                 }
-            }, 2400));
-            taskIds.add(Bukkit.getScheduler().scheduleSyncDelayedTask(plugin, () -> uhcWorld.setPVP(true), 6000));
+            }, FINAL_HEAL*20));
+            taskIds.add(Bukkit.getScheduler().scheduleSyncDelayedTask(plugin, () -> uhcWorld.setPVP(true), GRACE_PERIOD*20));
             taskIds.add(Bukkit.getScheduler().scheduleSyncRepeatingTask(plugin, () -> updateScoreboard(Objects.requireNonNull(scoreboard.getObjective("uhcMain"))), 120, 20));
             taskIds.add(Bukkit.getScheduler().scheduleSyncRepeatingTask(plugin, () -> {
                 if (uhcWorld.getWorldBorder().getSize() > 64) {
-                    uhcWorld.getWorldBorder().setSize(uhcWorld.getWorldBorder().getSize() - 0.26);
+                    uhcWorld.getWorldBorder().setSize(uhcWorld.getWorldBorder().getSize() - 0.0235);
                     scoreboard.resetScores(BORDER_PREFIX + borderSize);
                     borderSize = Math.round(uhcWorld.getWorldBorder().getSize());
                     Objects.requireNonNull(scoreboard.getObjective("uhcMain")).getScore(BORDER_PREFIX + borderSize).setScore(2);
                 }
-            }, 4920, 1));
-            taskIds.add(Bukkit.getScheduler().scheduleSyncDelayedTask(plugin, () -> players.forEach((p) -> p.sendMessage(" " + YELLOW + "5分钟后将强制结束游戏！届时所有存活玩家都会成为胜利者！")), 18000));
-            taskIds.add(Bukkit.getScheduler().scheduleSyncDelayedTask(plugin, this::endGame, 24000));
+            }, FINAL_HEAL*20+ BORDER_SHRINK_IN*20, 1));
+            taskIds.add(Bukkit.getScheduler().scheduleSyncDelayedTask(plugin, () -> players.forEach((p) -> p.sendMessage(" " + YELLOW + "5分钟后将强制结束游戏！届时所有存活玩家都会成为胜利者！")), 66000));
+            taskIds.add(Bukkit.getScheduler().scheduleSyncDelayedTask(plugin, this::endGame, 72000));
         };
     }
 
@@ -140,9 +144,9 @@ public class UHCGame extends tech.yfshadaow.Game implements Listener, CommandExe
         o.getScore(" ").setScore(7); //
         gameTime = 0;
         o.getScore(GAME_TIME_PREFIX + gameTime).setScore(6); //Game Time:
-        countdown1 = 300;
+        countdown1 = GRACE_PERIOD;
         o.getScore(GRACE_PERIOD_PREFIX + countdown1).setScore(5); //Grace Period remain:
-        countdown2 = 120;
+        countdown2 = FINAL_HEAL;
         o.getScore(FINAL_HEAL_PREFIX + countdown2).setScore(4);
         o.getScore("  ").setScore(3);
         borderSize = 1000;
@@ -152,12 +156,11 @@ public class UHCGame extends tech.yfshadaow.Game implements Listener, CommandExe
 
     private void updateScoreboard(Objective o) {
         Objects.requireNonNull(o.getScoreboard()).resetScores(GAME_TIME_PREFIX + gameTime);
-        gameTime++;
-        o.getScore(GAME_TIME_PREFIX + gameTime).setScore(6);
+        o.getScore(GAME_TIME_PREFIX + ++gameTime).setScore(6);
         if (o.getScore(GRACE_PERIOD_PREFIX + countdown1).isScoreSet()) {
             o.getScoreboard().resetScores(GRACE_PERIOD_PREFIX + countdown1);
             if (--countdown1 == 0) {
-                countdown1 = 120;
+                countdown1 = 1500;
                 o.getScore(DEATH_MATCH_PREFIX + countdown1).setScore(5);
             } else {
                 o.getScore(GRACE_PERIOD_PREFIX + countdown1).setScore(5);
@@ -173,7 +176,7 @@ public class UHCGame extends tech.yfshadaow.Game implements Listener, CommandExe
         if (o.getScore(FINAL_HEAL_PREFIX + countdown2).isScoreSet()) {
             o.getScoreboard().resetScores(FINAL_HEAL_PREFIX + countdown2);
             if (--countdown2 == 0) {
-                countdown2 = 120;
+                countdown2 = BORDER_SHRINK_IN;
                 o.getScore(BORDER_SHRINK_PREFIX + countdown2).setScore(4);
             } else {
                 o.getScore(FINAL_HEAL_PREFIX + countdown2).setScore(4);
@@ -181,7 +184,7 @@ public class UHCGame extends tech.yfshadaow.Game implements Listener, CommandExe
         } else if (o.getScore(BORDER_SHRINK_PREFIX + countdown2).isScoreSet()) {
             o.getScoreboard().resetScores(BORDER_SHRINK_PREFIX + countdown2);
             if (--countdown2 == 0) {
-                o.getScore("  " + YELLOW + "快去中心点！").setScore(4);
+                o.getScore("  " + YELLOW + "快去中心点x=0,z=0！").setScore(4);
             } else {
                 o.getScore(BORDER_SHRINK_PREFIX + countdown2).setScore(4);
             }
@@ -283,7 +286,9 @@ public class UHCGame extends tech.yfshadaow.Game implements Listener, CommandExe
         for (Player p : players) {
             p.setGameMode(GameMode.SURVIVAL);
             p.setBedSpawnLocation(worldSpawn, true);
-            p.addPotionEffect(new PotionEffect(PotionEffectType.DAMAGE_RESISTANCE, 200, 30));
+            p.addPotionEffect(new PotionEffect(PotionEffectType.DAMAGE_RESISTANCE, 1200, 30));
+            p.addPotionEffect(new PotionEffect(PotionEffectType.WATER_BREATHING, 1200, 30));
+            p.addPotionEffect(new PotionEffect(PotionEffectType.FIRE_RESISTANCE, 1200, 30));
             p.teleport(new Location(uhcWorld, random.nextInt(1000) - 500, 100, random.nextInt(1000) - 500));
         }
     }
@@ -369,6 +374,20 @@ public class UHCGame extends tech.yfshadaow.Game implements Listener, CommandExe
         if (Bukkit.getRecipe(key) == null) {
             Bukkit.addRecipe(recipe);
         }
+        //golden head
+        temp = new ItemStack(Material.GOLDEN_APPLE);
+        ItemMeta meta = temp.getItemMeta();
+        Objects.requireNonNull(meta).setDisplayName(BOLD.toString()+GOLD+BOLD+"Golden Head");
+        temp.setItemMeta(meta);
+        key = new NamespacedKey(plugin, "golden_head");
+        recipe = new ShapedRecipe(key, temp).
+                shape("xxx", "xyx", "xxx").
+                setIngredient('x', Material.GOLD_INGOT).
+                setIngredient('y', Material.PLAYER_HEAD);
+        customRecipes.put(key, recipe);
+        if (Bukkit.getRecipe(key) == null) {
+            Bukkit.addRecipe(recipe);
+        }
     }
 
     @Override
@@ -420,6 +439,7 @@ public class UHCGame extends tech.yfshadaow.Game implements Listener, CommandExe
         alive.clear();
         Bukkit.unloadWorld("uhc", false);
         refreshScoreboard();
+        placeStartButton();
         try {
             FileUtils.deleteDirectory(new File("uhc"));
         } catch (IOException e) {
@@ -472,6 +492,7 @@ public class UHCGame extends tech.yfshadaow.Game implements Listener, CommandExe
     public void onDisable() {
         unregisterScoreboard();
         unloadRecipes();
+        placeStartButton();
     }
 
     private void unloadRecipes() {
