@@ -106,34 +106,38 @@ public class UHCGame extends tech.yfshadaow.Game implements Listener, CommandExe
     public void initGameRunnable() {
         gameRunnable = () -> {
             this.players.addAll(getStartingPlayers());
-            alive.addAll(players);
-            removeStartButton();
-            generateRandomWorld();
-            startCountdown();
-            Bukkit.getScheduler().runTaskLater(plugin, () -> {
-                spreadPlayers(players);
-                initScoreboard(Objects.requireNonNull(scoreboard.getObjective("uhcMain")));
-                for (Player p : players) {
-                    p.setScoreboard(scoreboard);
-                }
-            }, 100);
-            taskIds.add(Bukkit.getScheduler().scheduleSyncDelayedTask(plugin, () -> {
-                for (Player p : alive) {
-                    p.addPotionEffect(new PotionEffect(PotionEffectType.HEAL, 1, 5));
-                }
-            }, FINAL_HEAL*20));
-            taskIds.add(Bukkit.getScheduler().scheduleSyncDelayedTask(plugin, () -> uhcWorld.setPVP(true), GRACE_PERIOD*20));
-            taskIds.add(Bukkit.getScheduler().scheduleSyncRepeatingTask(plugin, () -> updateScoreboard(Objects.requireNonNull(scoreboard.getObjective("uhcMain"))), 120, 20));
-            taskIds.add(Bukkit.getScheduler().scheduleSyncRepeatingTask(plugin, () -> {
-                if (uhcWorld.getWorldBorder().getSize() > 64) {
-                    uhcWorld.getWorldBorder().setSize(uhcWorld.getWorldBorder().getSize() - 0.0235);
-                    scoreboard.resetScores(BORDER_PREFIX + borderSize);
-                    borderSize = Math.round(uhcWorld.getWorldBorder().getSize());
-                    Objects.requireNonNull(scoreboard.getObjective("uhcMain")).getScore(BORDER_PREFIX + borderSize).setScore(2);
-                }
-            }, FINAL_HEAL*20+ BORDER_SHRINK_IN*20, 1));
-            taskIds.add(Bukkit.getScheduler().scheduleSyncDelayedTask(plugin, () -> players.forEach((p) -> p.sendMessage(" " + YELLOW + "5分钟后将强制结束游戏！届时所有存活玩家都会成为胜利者！")), 66000));
-            taskIds.add(Bukkit.getScheduler().scheduleSyncDelayedTask(plugin, this::endGame, 72000));
+            if (players.size() < 2) {
+                players.forEach((p) -> p.sendMessage(RED+"人数少于2人，无法开始游戏！"));
+            } else {
+                alive.addAll(players);
+                removeStartButton();
+                generateRandomWorld();
+                startCountdown();
+                Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                    spreadPlayers(players);
+                    initScoreboard(Objects.requireNonNull(scoreboard.getObjective("uhcMain")));
+                    for (Player p : players) {
+                        p.setScoreboard(scoreboard);
+                    }
+                }, 100);
+                taskIds.add(Bukkit.getScheduler().scheduleSyncDelayedTask(plugin, () -> {
+                    for (Player p : alive) {
+                        p.addPotionEffect(new PotionEffect(PotionEffectType.HEAL, 1, 5));
+                    }
+                }, FINAL_HEAL*20));
+                taskIds.add(Bukkit.getScheduler().scheduleSyncDelayedTask(plugin, () -> uhcWorld.setPVP(true), GRACE_PERIOD*20));
+                taskIds.add(Bukkit.getScheduler().scheduleSyncRepeatingTask(plugin, () -> updateScoreboard(Objects.requireNonNull(scoreboard.getObjective("uhcMain"))), 120, 20));
+                taskIds.add(Bukkit.getScheduler().scheduleSyncRepeatingTask(plugin, () -> {
+                    if (uhcWorld.getWorldBorder().getSize() > 64) {
+                        uhcWorld.getWorldBorder().setSize(uhcWorld.getWorldBorder().getSize() - 0.0235);
+                        scoreboard.resetScores(BORDER_PREFIX + borderSize);
+                        borderSize = Math.round(uhcWorld.getWorldBorder().getSize());
+                        Objects.requireNonNull(scoreboard.getObjective("uhcMain")).getScore(BORDER_PREFIX + borderSize).setScore(2);
+                    }
+                }, FINAL_HEAL*20+ BORDER_SHRINK_IN*20, 1));
+                taskIds.add(Bukkit.getScheduler().scheduleSyncDelayedTask(plugin, () -> players.forEach((p) -> p.sendMessage(" " + YELLOW + "5分钟后将强制结束游戏！届时所有存活玩家都会成为胜利者！")), 66000));
+                taskIds.add(Bukkit.getScheduler().scheduleSyncDelayedTask(plugin, this::endGame, 72000));
+            }
         };
     }
 
