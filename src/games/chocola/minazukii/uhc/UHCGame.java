@@ -108,6 +108,8 @@ public class UHCGame extends tech.yfshadaow.Game implements Listener, CommandExe
             this.players.addAll(getStartingPlayers());
             if (players.size() < 2) {
                 players.forEach((p) -> p.sendMessage(RED+"人数少于2人，无法开始游戏！"));
+                players.clear();
+                alive.clear();
             } else {
                 alive.addAll(players);
                 removeStartButton();
@@ -298,7 +300,7 @@ public class UHCGame extends tech.yfshadaow.Game implements Listener, CommandExe
     }
 
     private void generateRandomWorld() {
-        uhcWorld = Objects.requireNonNull(new WorldCreator("uhc").generator("Terra:DEFAULT").biomeProvider(new CustomBiomeProvider()).environment(World.Environment.NORMAL).generateStructures(false).createWorld());
+        uhcWorld = Objects.requireNonNull(new WorldCreator("uhc").generator("Terra:DEFAULT").createWorld());
         worldSpawn = new Location(uhcWorld, 0, 100, 0);
         uhcWorld.setDifficulty(Difficulty.HARD);
         uhcWorld.setPVP(false);
