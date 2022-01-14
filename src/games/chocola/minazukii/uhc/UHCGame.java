@@ -29,18 +29,17 @@ import org.bukkit.scoreboard.Scoreboard;
 import org.bukkit.util.BoundingBox;
 import org.jetbrains.annotations.NotNull;
 import tech.yfshadaow.PlayerEndGameEvent;
+import tech.yfshadaow.PlayerQuitData;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Objects;
+import java.util.*;
 
 import static org.bukkit.ChatColor.*;
-import static tech.yfshadaow.GameUtils.world;
+import static tech.yfshadaow.GameUtils.*;
+import static tech.yfshadaow.GameUtils.getPlayerQuitData;
 
-    /**
+/**
      Basic Logic:
      1. Initialization
          1) Add hub players to players list (Get from super method {@link tech.yfshadaow.Game#getStartingPlayers})
@@ -86,6 +85,7 @@ public class UHCGame extends tech.yfshadaow.Game implements Listener, CommandExe
     private long borderSize;
     private World uhcWorld;
     private Location worldSpawn;
+    private boolean running = false;
 
     private UHCGame(UHC plugin) {
         this.plugin = plugin;
@@ -121,6 +121,8 @@ public class UHCGame extends tech.yfshadaow.Game implements Listener, CommandExe
                     for (Player p : players) {
                         p.setScoreboard(scoreboard);
                     }
+                    running = true;
+                    gameUUID = UUID.randomUUID();
                 }, 100);
                 taskIds.add(Bukkit.getScheduler().scheduleSyncDelayedTask(plugin, () -> {
                     for (Player p : alive) {
@@ -398,12 +400,29 @@ public class UHCGame extends tech.yfshadaow.Game implements Listener, CommandExe
 
     @Override
     protected void savePlayerQuitData(Player p) {
-
+        PlayerQuitData quitData = new PlayerQuitData(p, this, gameUUID);
+        setPlayerQuitData(p.getUniqueId(), quitData);
+        players.remove(p);
+        alive.remove(p);
     }
 
     @Override
     protected void rejoin(Player p) {
-
+        if (!running) {
+            p.sendMessage("§c游戏已经结束！");
+            return;
+        }
+        if (!getPlayerQuitData(p.getUniqueId()).getGameUUID().equals(gameUUID)) {
+            p.sendMessage("§c游戏已经结束！");
+            return;
+        }
+        PlayerQuitData pqd = getPlayerQuitData(p.getUniqueId());
+        pqd.restoreBasicData(p);
+        players.add(p);
+        if (p.getGameMode().equals(GameMode.SURVIVAL)) {
+            alive.add(p);
+        }
+        setPlayerQuitData(p.getUniqueId(), null);
     }
 
     private void endGame() {
@@ -445,6 +464,7 @@ public class UHCGame extends tech.yfshadaow.Game implements Listener, CommandExe
         alive.clear();
         Bukkit.unloadWorld("uhc", false);
         refreshScoreboard();
+        gameUUID = null;
         placeStartButton();
         try {
             FileUtils.deleteDirectory(new File("uhc"));
