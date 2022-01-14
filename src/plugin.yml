@@ -1,6 +1,6 @@
 name: UHC
 main: games.chocola.minazukii.uhc.UHC
-version: 0.1-DEVELOPMENT
+version: 0.1.1-DEVELOPMENT
 api-version: 1.17
 depend: [GameUtils]
 commands:
