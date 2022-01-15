@@ -94,7 +94,7 @@ public class UHCGame extends tech.yfshadaow.Game implements Listener, CommandExe
         this.scoreboard = Objects.requireNonNull(Bukkit.getScoreboardManager()).getNewScoreboard();
         initGame(plugin, "UHC", 5, new Location(world, 10000, 41, 10002), BlockFace.NORTH,
                 new Location(world, 9998, 41, 10002), BlockFace.EAST,
-                new Location(world, 10000, 40, 10000), new BoundingBox(-1044, 45, -25, -983, 70, 27));
+                new Location(world, 10000, 40, 10000), new BoundingBox());
         initCustomRecipe();
         registerScoreboard();
     }
@@ -410,7 +410,12 @@ public class UHCGame extends tech.yfshadaow.Game implements Listener, CommandExe
         PlayerQuitData quitData = new PlayerQuitData(p, this, gameUUID);
         setPlayerQuitData(p.getUniqueId(), quitData);
         players.remove(p);
+        scoreboard.resetScores(PLAYERS_REMAIN_SUFFIX + alive.size());
         alive.remove(p);
+        Objects.requireNonNull(scoreboard.getObjective("uhcMain")).getScore(PLAYERS_REMAIN_SUFFIX + alive.size()).setScore(8);
+        if (alive.size() <= 1) {
+            endGame();
+        }
     }
 
     @Override
@@ -426,8 +431,11 @@ public class UHCGame extends tech.yfshadaow.Game implements Listener, CommandExe
         PlayerQuitData pqd = getPlayerQuitData(p.getUniqueId());
         pqd.restoreBasicData(p);
         players.add(p);
+        p.setScoreboard(scoreboard);
         if (p.getGameMode().equals(GameMode.SURVIVAL)) {
+            scoreboard.resetScores(PLAYERS_REMAIN_SUFFIX + alive.size());
             alive.add(p);
+            Objects.requireNonNull(scoreboard.getObjective("uhcMain")).getScore(PLAYERS_REMAIN_SUFFIX + alive.size()).setScore(8);
         }
         setPlayerQuitData(p.getUniqueId(), null);
     }
@@ -489,9 +497,6 @@ public class UHCGame extends tech.yfshadaow.Game implements Listener, CommandExe
     public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String alias, @NotNull String[] args) {
         if (command.getName().equals("forceend")) {
             if (!sender.isOp()) {
-                return false;
-            }
-            if (!(sender instanceof Player)) {
                 return false;
             }
             if (args.length != 1) {
