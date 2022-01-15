@@ -9,6 +9,7 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.Monster;
 import org.bukkit.entity.Player;
+import org.bukkit.entity.Skeleton;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockBreakEvent;
@@ -48,7 +49,7 @@ import static tech.yfshadaow.GameUtils.getPlayerQuitData;
          4) Init randomizer
          5) Init UHC world (Using {@link #generateRandomWorld})
          6) Spread players (Using {@link #spreadPlayers})
-         Make the center (0,0), spreading 1000 blocks far
+            Make the center (0,0), spreading 1000 blocks far
          7) Init scoreboard (Using {@link #initScoreboard})
              I. UHC (title)
              II. >---------------< [9]
@@ -62,7 +63,7 @@ import static tech.yfshadaow.GameUtils.getPlayerQuitData;
              X. >---------------< [1]
      2. Countdowns (Using {@link #updateScoreboard})
      3. Check if end (Using {@code @EventHandler{@link #onPlayerDies}} and time limit)
-     */
+ */
 
 public class UHCGame extends tech.yfshadaow.Game implements Listener, CommandExecutor {
     private static final UHCGame instance = new UHCGame((UHC) Bukkit.getPluginManager().getPlugin("UHC"));
@@ -74,7 +75,7 @@ public class UHCGame extends tech.yfshadaow.Game implements Listener, CommandExe
     private final String GRACE_PERIOD_PREFIX = "  " + LIGHT_PURPLE + "和平时间剩余：" + GREEN;
     private final String DEATH_MATCH_PREFIX = "  " + LIGHT_PURPLE + "最终决战倒计时：" + GREEN;
     private final String FINAL_HEAL_PREFIX = "  " + YELLOW + "补血倒计时：" + GREEN;
-    private final String BORDER_SHRINK_PREFIX = "  " + YELLOW + "边界缩小中！结束倒计时：" + GREEN;
+    private final String BORDER_SHRINK_PREFIX = "  " + YELLOW + "边界缩小倒计时：" + GREEN;
     private final String BORDER_PREFIX = "  " + RED + "边界大小：" + GREEN;
     private final long GRACE_PERIOD = 600; //in seconds
     private final long FINAL_HEAL = 300;
@@ -279,11 +280,17 @@ public class UHCGame extends tech.yfshadaow.Game implements Listener, CommandExe
     public void onEntitySpawn(CreatureSpawnEvent cse) {
         if (Objects.requireNonNull(cse.getEntity().getLocation().getWorld()).getName().equals("uhc") && cse.getSpawnReason().equals(CreatureSpawnEvent.SpawnReason.NATURAL)) {
             if (cse.getEntity() instanceof Monster) {
-                if (random.nextInt(100) < 25) {
-                    cse.setCancelled(true);
+                if (cse.getEntity() instanceof Skeleton) {
+                    if (random.nextInt(100) < 90) {
+                        cse.setCancelled(true);
+                    }
+                } else {
+                    if (random.nextInt(100) < 50) {
+                        cse.setCancelled(true);
+                    }
                 }
             } else {
-                if (random.nextInt(100) < 5) {
+                if (random.nextInt(100) < 10) {
                     cse.setCancelled(true);
                 }
             }
