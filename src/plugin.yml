@@ -7,3 +7,5 @@ author: MinazukiiChocola
 commands:
   forceend:
     description: force end a game
+  uhcteam:
+    description: team up in uhc game

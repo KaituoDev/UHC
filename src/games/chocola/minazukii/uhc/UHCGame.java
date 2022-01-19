@@ -3,6 +3,7 @@ package games.chocola.minazukii.uhc;
 import org.apache.commons.io.FileUtils;
 import org.bukkit.*;
 import org.bukkit.block.BlockFace;
+import org.bukkit.block.data.Powerable;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
@@ -27,6 +28,7 @@ import org.bukkit.potion.PotionEffectType;
 import org.bukkit.scoreboard.DisplaySlot;
 import org.bukkit.scoreboard.Objective;
 import org.bukkit.scoreboard.Scoreboard;
+import org.bukkit.scoreboard.Team;
 import org.bukkit.util.BoundingBox;
 import org.jetbrains.annotations.NotNull;
 import tech.yfshadaow.PlayerEndGameEvent;
@@ -38,7 +40,6 @@ import java.util.*;
 
 import static org.bukkit.ChatColor.*;
 import static tech.yfshadaow.GameUtils.*;
-import static tech.yfshadaow.GameUtils.getPlayerQuitData;
 
 /**
      Basic Logic:
@@ -69,8 +70,10 @@ public class UHCGame extends tech.yfshadaow.Game implements Listener, CommandExe
     private static final UHCGame instance = new UHCGame((UHC) Bukkit.getPluginManager().getPlugin("UHC"));
     private final Scoreboard scoreboard;
     private final ArrayList<Player> alive = new ArrayList<>();
+    private final ArrayList<Team> teams = new ArrayList<>();
     private final HashMap<NamespacedKey, Recipe> customRecipes = new HashMap<>();
     private final String PLAYERS_REMAIN_SUFFIX = "  " + AQUA + "剩余人数：" + GREEN;
+    private final String TEAMS_REMAIN_SUFFIX = "  " + AQUA + "剩余队伍：" + GREEN;
     private final String GAME_TIME_PREFIX = "  " + GRAY + "游戏时间：" + GREEN;
     private final String GRACE_PERIOD_PREFIX = "  " + LIGHT_PURPLE + "和平时间剩余：" + GREEN;
     private final String DEATH_MATCH_PREFIX = "  " + LIGHT_PURPLE + "最终决战倒计时：" + GREEN;
@@ -80,6 +83,8 @@ public class UHCGame extends tech.yfshadaow.Game implements Listener, CommandExe
     private final long GRACE_PERIOD = 600; //in seconds
     private final long FINAL_HEAL = 300;
     private final long BORDER_SHRINK_IN = 600;
+    private final int SINGLE_PLAYER_MODE = 0;
+    private final int TEAM_MODE = 1;
     private long gameTime;
     private long countdown1;
     private long countdown2;
@@ -87,6 +92,7 @@ public class UHCGame extends tech.yfshadaow.Game implements Listener, CommandExe
     private World uhcWorld;
     private Location worldSpawn;
     private boolean running = false;
+    private int mode;
 
     private UHCGame(UHC plugin) {
         this.plugin = plugin;
@@ -108,48 +114,194 @@ public class UHCGame extends tech.yfshadaow.Game implements Listener, CommandExe
         gameRunnable = () -> {
             this.players.addAll(getStartingPlayers());
             if (players.size() < 2) {
-                players.forEach((p) -> p.sendMessage(RED+"人数少于2人，无法开始游戏！"));
+                players.forEach(p -> p.sendMessage(RED+"人数少于2人，无法开始游戏！"));
                 players.clear();
                 alive.clear();
             } else {
-                alive.addAll(players);
-                removeStartButton();
-                generateRandomWorld();
-                startCountdown();
+                if (!((Powerable)new Location(world, 10000, 41, 9998).getBlock().getBlockData()).isPowered()) {
+                    mode = SINGLE_PLAYER_MODE;
+                    mainLogic();
+                } else {
+                    mode = TEAM_MODE;
+                    if (!((Powerable)new Location(world, 9989, 38, 10000).getBlock().getBlockData()).isPowered()) {
+                        if (players.size() < 3) {
+                            players.forEach((p) -> p.sendMessage(RED+"人数少于3人，无法随机分队！"));
+                        } else {
+                            for (int i = 0; i < players.size() / 3.0; i++) {
+                                teams.add(randomNewTeam());
+                            }
+                            List<Player> playersClone = new ArrayList<>(players);
+                            for (Team t: teams) {
+                                for (int i = 0; i < 3; i++) {
+                                    Player entry = playersClone.get(random.nextInt(playersClone.size()));
+                                    playersClone.remove(entry);
+                                    t.addEntry(entry.getName());
+                                }
+                            }
+                            mainLogic();
+                        }
+                    } else {
+                        if (teams.size() < 2) {
+                            players.forEach(p -> p.sendMessage(RED + "没有选择超过2个队伍！"));
+                        } else {
+                            mainLogic();
+                        }
+                    }
+                }
+
+            }
+        };
+    }
+
+    private void mainLogic() {
+        alive.addAll(players);
+        removeStartButton();
+        generateRandomWorld();
+        startCountdown();
+        switch (mode) {
+            case SINGLE_PLAYER_MODE:
                 Bukkit.getScheduler().runTaskLater(plugin, () -> {
-                    spreadPlayers(players);
                     initScoreboard(Objects.requireNonNull(scoreboard.getObjective("uhcMain")));
                     for (Player p : players) {
+                        spreadPlayers(p);
                         p.setScoreboard(scoreboard);
                     }
                     running = true;
                     gameUUID = UUID.randomUUID();
                 }, 100);
-                taskIds.add(Bukkit.getScheduler().scheduleSyncDelayedTask(plugin, () -> {
-                    for (Player p : alive) {
-                        p.addPotionEffect(new PotionEffect(PotionEffectType.HEAL, 1, 5));
-                    }
-                }, FINAL_HEAL*20));
-                taskIds.add(Bukkit.getScheduler().scheduleSyncDelayedTask(plugin, () -> uhcWorld.setPVP(true), GRACE_PERIOD*20));
-                taskIds.add(Bukkit.getScheduler().scheduleSyncRepeatingTask(plugin, () -> updateScoreboard(Objects.requireNonNull(scoreboard.getObjective("uhcMain"))), 120, 20));
-                taskIds.add(Bukkit.getScheduler().scheduleSyncRepeatingTask(plugin, () -> {
-                    if (uhcWorld.getWorldBorder().getSize() > 64) {
-                        uhcWorld.getWorldBorder().setSize(uhcWorld.getWorldBorder().getSize() - 0.0235);
-                        scoreboard.resetScores(BORDER_PREFIX + borderSize);
-                        borderSize = Math.round(uhcWorld.getWorldBorder().getSize());
-                        Objects.requireNonNull(scoreboard.getObjective("uhcMain")).getScore(BORDER_PREFIX + borderSize).setScore(2);
-                    }
-                }, FINAL_HEAL*20+ BORDER_SHRINK_IN*20, 1));
-                taskIds.add(Bukkit.getScheduler().scheduleSyncDelayedTask(plugin, () -> players.forEach((p) -> p.sendMessage(" " + YELLOW + "5分钟后将强制结束游戏！届时所有存活玩家都会成为胜利者！")), 66000));
-                taskIds.add(Bukkit.getScheduler().scheduleSyncDelayedTask(plugin, this::endGame, 72000));
+            case TEAM_MODE:
+                Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                    initScoreboard(Objects.requireNonNull(scoreboard.getObjective("uhcMain")));
+                    teams.forEach(this::spreadPlayers);
+                    players.forEach(p -> p.setScoreboard(scoreboard));
+                    running = true;
+                    gameUUID = UUID.randomUUID();
+                }, 100);
+        }
+        taskIds.add(Bukkit.getScheduler().scheduleSyncDelayedTask(plugin, () -> {
+            for (Player p : alive) {
+                p.addPotionEffect(new PotionEffect(PotionEffectType.HEAL, 1, 5));
             }
-        };
+        }, FINAL_HEAL*20));
+        taskIds.add(Bukkit.getScheduler().scheduleSyncDelayedTask(plugin, () -> uhcWorld.setPVP(true), GRACE_PERIOD*20));
+        taskIds.add(Bukkit.getScheduler().scheduleSyncRepeatingTask(plugin, () -> updateScoreboard(Objects.requireNonNull(scoreboard.getObjective("uhcMain"))), 120, 20));
+        taskIds.add(Bukkit.getScheduler().scheduleSyncRepeatingTask(plugin, () -> {
+            if (uhcWorld.getWorldBorder().getSize() > 64) {
+                uhcWorld.getWorldBorder().setSize(uhcWorld.getWorldBorder().getSize() - 0.0235);
+                scoreboard.resetScores(BORDER_PREFIX + borderSize);
+                borderSize = Math.round(uhcWorld.getWorldBorder().getSize());
+                Objects.requireNonNull(scoreboard.getObjective("uhcMain")).getScore(BORDER_PREFIX + borderSize).setScore(2);
+            }
+        }, FINAL_HEAL*20+ BORDER_SHRINK_IN*20, 1));
+        taskIds.add(Bukkit.getScheduler().scheduleSyncDelayedTask(plugin, () -> players.forEach((p) -> p.sendMessage(" " + YELLOW + "5分钟后将强制结束游戏！届时所有存活玩家都会成为胜利者！")), 66000));
+        taskIds.add(Bukkit.getScheduler().scheduleSyncDelayedTask(plugin, this::endGame, 72000));
+    }
+
+    private Team randomNewTeam() {
+        int index = random.nextInt(14);
+        if (getTeam(index, false) == null) {
+            return getTeam(index, true);
+        } else {
+            return randomNewTeam();
+        }
+    }
+    
+    private Team getTeam(int i, boolean create) {
+        Team res;
+        if (create) {
+            switch (i) {
+                case 0:
+                    if (scoreboard.getTeam("uhcAQUA") != null) {return scoreboard.getTeam("uhcAQUA");}
+                    res = scoreboard.registerNewTeam("uhcAQUA");
+                    res.setColor(AQUA);
+                case 1:
+                    if (scoreboard.getTeam("uhcBLUE") != null) {return scoreboard.getTeam("uhcBLUE");}
+                    res = scoreboard.registerNewTeam("uhcBLUE");
+                    res.setColor(BLUE);
+                case 2:
+                    if (scoreboard.getTeam("uhcDARK_AQUA") != null) {return scoreboard.getTeam("uhcDARK_AQUA");}
+                    res = scoreboard.registerNewTeam("uhcDARK_AQUA");
+                    res.setColor(DARK_AQUA);
+                case 3:
+                    if (scoreboard.getTeam("uhcDARK_BLUE") != null) {return scoreboard.getTeam("uhcDARK_BLUE");}
+                    res = scoreboard.registerNewTeam("uhcDARK_BLUE");
+                    res.setColor(DARK_BLUE);
+                case 4:
+                    if (scoreboard.getTeam("uhcDARK_GRAY") != null) {return scoreboard.getTeam("uhcDARK_GRAY");}
+                    res = scoreboard.registerNewTeam("uhcDARK_GRAY");
+                    res.setColor(DARK_GRAY);
+                case 5:
+                    if (scoreboard.getTeam("uhcDARK_GREEN") != null) {return scoreboard.getTeam("uhcDARK_GREEN");}
+                    res = scoreboard.registerNewTeam("uhcDARK_GREEN");
+                    res.setColor(DARK_GREEN);
+                case 6:
+                    if (scoreboard.getTeam("uhcDARK_PURPLE") != null) {return scoreboard.getTeam("uhcDARK_PURPLE");}
+                    res = scoreboard.registerNewTeam("uhcDARK_PURPLE");
+                    res.setColor(DARK_PURPLE);
+                case 7:
+                    if (scoreboard.getTeam("uhcDARK_RED") != null) {return scoreboard.getTeam("uhcDARK_RED");}
+                    res = scoreboard.registerNewTeam("uhcDARK_RED");
+                    res.setColor(DARK_RED);
+                case 8:
+                    if (scoreboard.getTeam("uhcGOLD") != null) {return scoreboard.getTeam("uhcGOLD");}
+                    res = scoreboard.registerNewTeam("uhcGOLD");
+                    res.setColor(GOLD);
+                case 9:
+                    if (scoreboard.getTeam("uhcGRAY") != null) {return scoreboard.getTeam("uhcGRAY");}
+                    res = scoreboard.registerNewTeam("uhcGRAY");
+                    res.setColor(GRAY);
+                case 10:
+                    if (scoreboard.getTeam("uhcGREEN") != null) {return scoreboard.getTeam("uhcGREEN");}
+                    res = scoreboard.registerNewTeam("uhcGREEN");
+                    res.setColor(GREEN);
+                case 11:
+                    if (scoreboard.getTeam("uhcLIGHT_PURPLE") != null) {return scoreboard.getTeam("uhcLIGHT_PURPLE");}
+                    res = scoreboard.registerNewTeam("uhcLIGHT_PURPLE");
+                    res.setColor(LIGHT_PURPLE);
+                case 12:
+                    if (scoreboard.getTeam("uhcRED") != null) {return scoreboard.getTeam("uhcRED");}
+                    res = scoreboard.registerNewTeam("uhcRED");
+                    res.setColor(RED);
+                case 13:
+                    if (scoreboard.getTeam("uhcYELLOW") != null) {return scoreboard.getTeam("uhcYELLOW");}
+                    res = scoreboard.registerNewTeam("uhcYELLOW");
+                    res.setColor(YELLOW);
+                default:
+                    if (scoreboard.getTeam("uhcWHITE") != null) {return scoreboard.getTeam("uhcWHITE");}
+                    res = scoreboard.registerNewTeam("uhcWHITE");
+                    res.setColor(WHITE);
+            }
+        } else {
+            res = switch (i) {
+                case 0 -> scoreboard.getTeam("uhcAQUA");
+                case 1 -> scoreboard.getTeam("uhcBLUE");
+                case 2 -> scoreboard.getTeam("uhcDARK_AQUA");
+                case 3 -> scoreboard.getTeam("uhcDARK_BLUE");
+                case 4 -> scoreboard.getTeam("uhcDARK_GRAY");
+                case 5 -> scoreboard.getTeam("uhcDARK_GREEN");
+                case 6 -> scoreboard.getTeam("uhcDARK_PURPLE");
+                case 7 -> scoreboard.getTeam("uhcDARK_RED");
+                case 8 -> scoreboard.getTeam("uhcGOLD");
+                case 9 -> scoreboard.getTeam("uhcGRAY");
+                case 10 -> scoreboard.getTeam("uhcGREEN");
+                case 11 -> scoreboard.getTeam("uhcLIGHT_PURPLE");
+                case 12 -> scoreboard.getTeam("uhcRED");
+                case 13 -> scoreboard.getTeam("uhcYELLOW");
+                default -> scoreboard.getTeam("uhcWHITE");
+            };
+        }
+        return res;
     }
 
     private void initScoreboard(Objective o) {
         o.setDisplayName(BOLD.toString() + GOLD + BOLD + "UHC"); //UHC
         o.getScore(DARK_GRAY + ">---------------<").setScore(9); //>---------------<
-        o.getScore(PLAYERS_REMAIN_SUFFIX + alive.size()).setScore(8); //>>Players remain:
+        switch (mode) {
+            case SINGLE_PLAYER_MODE:
+                o.getScore(PLAYERS_REMAIN_SUFFIX + alive.size()).setScore(8); //Players remain:
+            case TEAM_MODE:
+                o.getScore(TEAMS_REMAIN_SUFFIX + alive.size()).setScore(8); //Teams remain:
+        }
         o.getScore(" ").setScore(7); //
         gameTime = 0;
         o.getScore(GAME_TIME_PREFIX + gameTime).setScore(6); //Game Time:
@@ -217,11 +369,29 @@ public class UHCGame extends tech.yfshadaow.Game implements Listener, CommandExe
             for (Player p : players) {
                 p.sendMessage(death.getName() + "被" + (death.getKiller() == null ? "" : death.getKiller().getName()) + "淘汰了！");
             }
-            scoreboard.resetScores(PLAYERS_REMAIN_SUFFIX + alive.size());
-            alive.remove(death);
-            Objects.requireNonNull(scoreboard.getObjective("uhcMain")).getScore(PLAYERS_REMAIN_SUFFIX + alive.size()).setScore(8);
-            if (alive.size() <= 1) {
-                endGame();
+            
+            if (mode == TEAM_MODE) {
+                scoreboard.resetScores(TEAMS_REMAIN_SUFFIX + teams.size());
+                alive.remove(death);
+                for (Team t: teams) {
+                    if (t.hasEntry(death.getName())) {
+                        t.removeEntry(death.getName());
+                        if (t.getEntries().size() <= 0) {
+                            teams.remove(t);
+                        }
+                    }
+                }
+                Objects.requireNonNull(scoreboard.getObjective("uhcMain")).getScore(TEAMS_REMAIN_SUFFIX + teams.size()).setScore(8);
+                if (teams.size() <= 1) {
+                    endGame();
+                }
+            } else if (mode == SINGLE_PLAYER_MODE) {
+                scoreboard.resetScores(PLAYERS_REMAIN_SUFFIX + alive.size());
+                alive.remove(death);
+                Objects.requireNonNull(scoreboard.getObjective("uhcMain")).getScore(PLAYERS_REMAIN_SUFFIX + alive.size()).setScore(8);
+                if (alive.size() <= 1) {
+                    endGame();
+                }
             }
         }
     }
@@ -297,14 +467,26 @@ public class UHCGame extends tech.yfshadaow.Game implements Listener, CommandExe
         }
     }
 
-    private void spreadPlayers(List<Player> players) {
-        for (Player p : players) {
-            p.setGameMode(GameMode.SURVIVAL);
+    private void spreadPlayers(Player p) {
+        p.setGameMode(GameMode.SURVIVAL);
+        p.setBedSpawnLocation(worldSpawn, true);
+        p.addPotionEffect(new PotionEffect(PotionEffectType.DAMAGE_RESISTANCE, 1200, 30));
+        p.addPotionEffect(new PotionEffect(PotionEffectType.WATER_BREATHING, 1200, 30));
+        p.addPotionEffect(new PotionEffect(PotionEffectType.FIRE_RESISTANCE, 1200, 30));
+        p.teleport(new Location(uhcWorld, random.nextInt(1000) - 500, 100, random.nextInt(1000) - 500));
+    }
+
+    private void spreadPlayers(Team t) {
+        Player p;
+        Location destination = new Location(uhcWorld, random.nextInt(1000) - 500, 100, random.nextInt(1000) - 500);
+        for (String s: t.getEntries()) {
+            p = Bukkit.getPlayer(s);
+            Objects.requireNonNull(p).setGameMode(GameMode.SURVIVAL);
             p.setBedSpawnLocation(worldSpawn, true);
             p.addPotionEffect(new PotionEffect(PotionEffectType.DAMAGE_RESISTANCE, 1200, 30));
             p.addPotionEffect(new PotionEffect(PotionEffectType.WATER_BREATHING, 1200, 30));
             p.addPotionEffect(new PotionEffect(PotionEffectType.FIRE_RESISTANCE, 1200, 30));
-            p.teleport(new Location(uhcWorld, random.nextInt(1000) - 500, 100, random.nextInt(1000) - 500));
+            p.teleport(destination);
         }
     }
 
@@ -406,7 +588,7 @@ public class UHCGame extends tech.yfshadaow.Game implements Listener, CommandExe
     }
 
     @Override
-    protected void savePlayerQuitData(Player p) {
+    public void savePlayerQuitData(Player p) {
         PlayerQuitData quitData = new PlayerQuitData(p, this, gameUUID);
         setPlayerQuitData(p.getUniqueId(), quitData);
         players.remove(p);
@@ -419,7 +601,7 @@ public class UHCGame extends tech.yfshadaow.Game implements Listener, CommandExe
     }
 
     @Override
-    protected void rejoin(Player p) {
+    public void rejoin(Player p) {
         if (!running) {
             p.sendMessage("§c游戏已经结束！");
             return;
@@ -473,10 +655,13 @@ public class UHCGame extends tech.yfshadaow.Game implements Listener, CommandExe
             p.sendMessage(winner.toString());
             p.sendMessage(mvp.toString());
             p.teleport(hubLocation);
+            p.setBedSpawnLocation(new Location(world, 0, 89, 0), true);
             Bukkit.getPluginManager().callEvent(new PlayerEndGameEvent(p, this));
         }
+        unregisterTeams();
         players.clear();
         alive.clear();
+        teams.clear();
         Bukkit.unloadWorld("uhc", false);
         refreshScoreboard();
         gameUUID = null;
@@ -506,6 +691,104 @@ public class UHCGame extends tech.yfshadaow.Game implements Listener, CommandExe
                 endGame();
                 return true;
             }
+        } else if (command.getName().equals("uhcteam")) {
+            if (!(sender instanceof Player)) {
+                return false;
+            }
+            if (!new BoundingBox(9986, 33, 9996, 10006, 45, 10006).contains(((Player) sender).getLocation().toVector())) {
+                return false;
+            }
+            if (!((Powerable)new Location(world, 10000, 41, 9998).getBlock().getBlockData()).isPowered()) {
+                sender.sendMessage(RED+"游戏模式为单人模式，无法选择队伍！");
+                return false;
+            }
+            if (!((Powerable)new Location(world, 9989, 38, 10000).getBlock().getBlockData()).isPowered()) {
+                sender.sendMessage(RED+"分队模式为随机分队，无法选择队伍！");
+                return false;
+            }
+            if (args.length != 1) {
+                sender.sendMessage(RED+"1 argument expected but found "+args.length);
+                return false;
+            }
+            if (args[0].equals("quit")) {
+                teams.forEach(t -> t.removeEntry(sender.getName()));
+                return true;
+            }
+            try {
+                teams.forEach(t -> t.removeEntry(sender.getName()));
+                getTeam(Integer.parseInt(args[0]), true).addEntry(sender.getName());
+                StringBuilder sb = new StringBuilder();
+                sb.append("你加入了");
+                switch (Integer.parseInt(args[0])) {
+                    case 0 -> {
+                        sb.append(AQUA);
+                        sb.append("浅蓝");
+                    }
+                    case 1 -> {
+                        sb.append(BLUE);
+                        sb.append("蓝");
+                    }
+                    case 2 -> {
+                        sb.append(DARK_AQUA);
+                        sb.append("青");
+                    }
+                    case 3 -> {
+                        sb.append(DARK_BLUE);
+                        sb.append("深蓝");
+                    }
+                    case 4 -> {
+                        sb.append(DARK_GRAY);
+                        sb.append("深灰");
+                    }
+                    case 5 -> {
+                        sb.append(DARK_GREEN);
+                        sb.append("深绿");
+                    }
+                    case 6 -> {
+                        sb.append(DARK_PURPLE);
+                        sb.append("紫");
+                    }
+                    case 7 -> {
+                        sb.append(DARK_RED);
+                        sb.append("深红");
+                    }
+                    case 8 -> {
+                        sb.append(GOLD);
+                        sb.append("橙");
+                    }
+                    case 9 -> {
+                        sb.append(GRAY);
+                        sb.append("灰");
+                    }
+                    case 10 -> {
+                        sb.append(GREEN);
+                        sb.append("绿");
+                    }
+                    case 11 -> {
+                        sb.append(LIGHT_PURPLE);
+                        sb.append("洋红");
+                    }
+                    case 12 -> {
+                        sb.append(RED);
+                        sb.append("红");
+                    }
+                    case 13 -> {
+                        sb.append(YELLOW);
+                        sb.append("黄");
+                    }
+                    default -> {
+                        sb.append(WHITE);
+                        sb.append("白");
+                    }
+                }
+                sb.append(RESET);
+                sb.append("队！");
+                sender.sendMessage(sb.toString());
+                return true;
+            } catch (NumberFormatException e) {
+                sender.sendMessage(RED+"参数必须为0-14中的一个整数！");
+                return false;
+            }
         }
         return false;
     }
@@ -524,6 +807,12 @@ public class UHCGame extends tech.yfshadaow.Game implements Listener, CommandExe
     private void unregisterScoreboard() {
         for (Objective o : scoreboard.getObjectives()) {
             o.unregister();
+        }
+    }
+    
+    private void unregisterTeams() {
+        for (Team t: teams) {
+            t.unregister();
         }
     }
 

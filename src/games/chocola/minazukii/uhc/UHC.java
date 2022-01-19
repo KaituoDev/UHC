@@ -40,6 +40,7 @@ public class UHC extends JavaPlugin implements Listener {
         Bukkit.getPluginManager().registerEvents(this, this);
         Bukkit.getPluginManager().registerEvents(UHCGame.getInstance(), this);
         Objects.requireNonNull(getCommand("forceend")).setExecutor(UHCGame.getInstance());
+        Objects.requireNonNull(getCommand("uhcteam")).setExecutor(UHCGame.getInstance());
         registerGame(UHCGame.getInstance());
     }
 
