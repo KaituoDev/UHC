@@ -98,7 +98,7 @@ public class UHCGame extends tech.yfshadaow.Game implements Listener, CommandExe
         this.plugin = plugin;
         players = UHC.players;
         this.scoreboard = Objects.requireNonNull(Bukkit.getScoreboardManager()).getNewScoreboard();
-        initGame(plugin, "UHC", 5, new Location(world, 10000, 41, 10002), BlockFace.NORTH,
+        initGame(plugin, "UHC", AQUA+"UHC", 5, new Location(world, 10000, 41, 10002), BlockFace.NORTH,
                 new Location(world, 9998, 41, 10002), BlockFace.EAST,
                 new Location(world, 10000, 40, 10000), new BoundingBox());
         initCustomRecipe();
