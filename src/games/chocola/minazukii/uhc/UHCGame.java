@@ -124,8 +124,8 @@ public class UHCGame extends tech.yfshadaow.Game implements Listener, CommandExe
                 } else {
                     mode = TEAM_MODE;
                     if (!((Powerable)new Location(world, 9989, 38, 10000).getBlock().getBlockData()).isPowered()) {
-                        if (players.size() < 3) {
-                            players.forEach((p) -> p.sendMessage(RED+"人数少于3人，无法随机分队！"));
+                        if (players.size() < 6) {
+                            players.forEach((p) -> p.sendMessage(RED+"人数少于6人，无法随机分队！"));
                         } else {
                             for (int i = 0; i < players.size() / 3.0; i++) {
                                 teams.add(randomNewTeam());
