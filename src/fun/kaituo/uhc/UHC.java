@@ -1,4 +1,4 @@
-package games.chocola.minazukii.uhc;
+package fun.kaituo.uhc;
 
 import org.apache.commons.io.FileUtils;
 import org.bukkit.Bukkit;
@@ -13,9 +13,9 @@ import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.java.JavaPlugin;
 
-import tech.yfshadaow.PlayerChangeGameEvent;
+import fun.kaituo.event.PlayerChangeGameEvent;
 
-import static tech.yfshadaow.GameUtils.*;
+import static fun.kaituo.GameUtils.*;
 
 import java.io.File;
 import java.io.IOException;
