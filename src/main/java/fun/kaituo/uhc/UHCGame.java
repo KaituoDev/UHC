@@ -66,6 +66,8 @@ import static fun.kaituo.GameUtils.*;
  */
 
 public class UHCGame extends Game implements Listener, CommandExecutor {
+
+
     //singleton
     private static final UHCGame instance = new UHCGame((UHC) Bukkit.getPluginManager().getPlugin("UHC"));
     public static UHCGame getInstance() {
@@ -277,7 +279,8 @@ public class UHCGame extends Game implements Listener, CommandExecutor {
         players.clear();
         alive.clear();
         teams.clear();
-        Bukkit.unloadWorld("uhc", false);
+        Bukkit.broadcastMessage("unload " + uhcWorld.getName() + " 结果为 " + Bukkit.unloadWorld(uhcWorld, false));
+
         reloadScoreboard();
         gameUUID = null;
         placeStartButton();
