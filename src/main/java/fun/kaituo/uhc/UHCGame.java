@@ -47,11 +47,11 @@ import static fun.kaituo.GameUtils.*;
      Game Logic:
      1. Initialization
          1) Basic minigame initialization (Using methods from super class {@link fun.kaituo.Game})
-         2) Init fun.kaituo.uhc.UHC world (Using {@link #generateRandomWorld})
+         2) Init UHC world (Using {@link #generateRandomWorld})
          3) Spread players (Using {@link #spreadPlayers})
             Make the center (0,0), spreading 1000 blocks far
          4) Init scoreboard (Using {@link #initScoreboard})
-             I. fun.kaituo.uhc.UHC (title)
+             I. UHC (title)
              II. >---------------< [9]
              III. Players remain: 10 [8]
              IV. (empty line) [7]
@@ -67,7 +67,7 @@ import static fun.kaituo.GameUtils.*;
 
 public class UHCGame extends Game implements Listener, CommandExecutor {
     //singleton
-    private static final UHCGame instance = new UHCGame((UHC) Bukkit.getPluginManager().getPlugin("fun.kaituo.uhc.UHC"));
+    private static final UHCGame instance = new UHCGame((UHC) Bukkit.getPluginManager().getPlugin("UHC"));
     public static UHCGame getInstance() {
         return instance;
     }
@@ -78,7 +78,7 @@ public class UHCGame extends Game implements Listener, CommandExecutor {
         this.plugin = plugin;
         players = UHC.players;
         this.scoreboard = Objects.requireNonNull(Bukkit.getScoreboardManager()).getNewScoreboard();
-        initializeGame(plugin, "fun.kaituo.uhc.UHC", AQUA+"fun.kaituo.uhc.UHC", new Location(world, 10000, 40, 10000), new BoundingBox());
+        initializeGame(plugin, "UHC", AQUA+"UHC", new Location(world, 10000, 40, 10000), new BoundingBox());
         initializeGameRunnable();
         initializeButtons(new Location(world, 10000, 41, 10002), BlockFace.NORTH,
                 new Location(world, 9998, 41, 10002), BlockFace.EAST);
@@ -549,7 +549,7 @@ public class UHCGame extends Game implements Listener, CommandExecutor {
             if (args.length != 1) {
                 return false;
             }
-            if (args[0].equals("fun.kaituo.uhc.UHC")) {
+            if (args[0].equals("UHC")) {
                 endGame();
                 return true;
             }
@@ -668,7 +668,7 @@ public class UHCGame extends Game implements Listener, CommandExecutor {
     private final String BORDER_PREFIX = "  " + RED + "边界大小：" + GREEN;
 
     private void initScoreboard(Objective o) {
-        o.setDisplayName(BOLD.toString() + GOLD + BOLD + "fun.kaituo.uhc.UHC"); //fun.kaituo.uhc.UHC
+        o.setDisplayName(BOLD.toString() + GOLD + BOLD + "UHC"); //UHC
         o.getScore(DARK_GRAY + ">---------------<").setScore(9); //>---------------<
         switch (mode) {
             case SINGLE_PLAYER_MODE:
@@ -728,8 +728,8 @@ public class UHCGame extends Game implements Listener, CommandExecutor {
     }
 
     private void registerScoreboard() {
-        scoreboard.registerNewObjective("uhcMain", "dummy", "fun.kaituo.uhc.UHC").setDisplaySlot(DisplaySlot.SIDEBAR);
-        scoreboard.registerNewObjective("uhcKills", "playerKillCount", "fun.kaituo.uhc.UHC Kills").setDisplaySlot(DisplaySlot.PLAYER_LIST);
+        scoreboard.registerNewObjective("uhcMain", "dummy", "UHC").setDisplaySlot(DisplaySlot.SIDEBAR);
+        scoreboard.registerNewObjective("uhcKills", "playerKillCount", "UHC Kills").setDisplaySlot(DisplaySlot.PLAYER_LIST);
     }
 
     private void unregisterScoreboard() {
