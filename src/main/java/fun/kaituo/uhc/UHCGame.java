@@ -106,6 +106,7 @@ public class UHCGame extends Game implements Listener, CommandExecutor {
     private boolean running = false;
 
     private void mainLogic() {
+        Bukkit.broadcastMessage("§c[UHC] UHC正在生成新世界！服务器短时间内可能冻结！");
         alive.addAll(players);
         removeStartButton();
         generateRandomWorld();
