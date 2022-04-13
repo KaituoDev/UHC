@@ -288,7 +288,7 @@ public class UHCGame extends Game implements Listener, CommandExecutor {
         }, 1);
 
         Bukkit.getScheduler().runTaskLater(plugin, () -> { //tp走所有玩家后再unload
-            Bukkit.broadcastMessage("unload " + uhcWorld.getName() + " 结果为 " + Bukkit.unloadWorld(uhcWorld, false));
+            Bukkit.unloadWorld(uhcWorld, false);
             placeStartButton();
             try {
                 FileUtils.deleteDirectory(new File("uhc"));
