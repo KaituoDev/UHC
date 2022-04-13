@@ -274,20 +274,20 @@ public class UHCGame extends Game implements Listener, CommandExecutor {
             p.setBedSpawnLocation(new Location(world, 0, 89, 0), true);
             Bukkit.getPluginManager().callEvent(new PlayerEndGameEvent(p, this));
         }
+        players.clear();
         unregisterTeams();
         alive.clear();
         teams.clear();
         reloadScoreboard();
         gameUUID = null;
 
-        Bukkit.getScheduler().runTaskLater(plugin, () -> {
-            for (Player p : players) {
+        Bukkit.getScheduler().runTaskLater(plugin, () -> { //这步不一定有用 只是防止玩家重生和tp在一个tick里会有bug
+            for (Player p : uhcWorld.getPlayers()) {
                 p.teleport(hubLocation);
             }
-            players.clear();
-        }, 10);
+        }, 1);
 
-        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+        Bukkit.getScheduler().runTaskLater(plugin, () -> { //tp走所有玩家后再unload
             Bukkit.broadcastMessage("unload " + uhcWorld.getName() + " 结果为 " + Bukkit.unloadWorld(uhcWorld, false));
             placeStartButton();
             try {
@@ -300,7 +300,7 @@ public class UHCGame extends Game implements Listener, CommandExecutor {
             for (int i : taskIdsCopy) {
                 Bukkit.getScheduler().cancelTask(i);
             }
-        }, 20);
+        }, 2);
 
     }
 
