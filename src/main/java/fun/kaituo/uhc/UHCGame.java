@@ -271,16 +271,21 @@ public class UHCGame extends Game implements Listener, CommandExecutor {
         for (Player p : players) {
             p.sendMessage(winner.toString());
             p.sendMessage(mvp.toString());
-            p.teleport(hubLocation);
             p.setBedSpawnLocation(new Location(world, 0, 89, 0), true);
             Bukkit.getPluginManager().callEvent(new PlayerEndGameEvent(p, this));
         }
         unregisterTeams();
-        players.clear();
         alive.clear();
         teams.clear();
         reloadScoreboard();
         gameUUID = null;
+
+        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            for (Player p : players) {
+                p.teleport(hubLocation);
+            }
+            players.clear();
+        }, 10);
 
         Bukkit.getScheduler().runTaskLater(plugin, () -> {
             Bukkit.broadcastMessage("unload " + uhcWorld.getName() + " 结果为 " + Bukkit.unloadWorld(uhcWorld, false));
