@@ -1,5 +1,6 @@
 package fun.kaituo.uhc;
 
+import fun.kaituo.Game;
 import org.apache.commons.io.FileUtils;
 import org.bukkit.*;
 import org.bukkit.block.BlockFace;
@@ -46,11 +47,11 @@ import static fun.kaituo.GameUtils.*;
      Game Logic:
      1. Initialization
          1) Basic minigame initialization (Using methods from super class {@link fun.kaituo.Game})
-         2) Init UHC world (Using {@link #generateRandomWorld})
+         2) Init fun.kaituo.uhc.UHC world (Using {@link #generateRandomWorld})
          3) Spread players (Using {@link #spreadPlayers})
             Make the center (0,0), spreading 1000 blocks far
          4) Init scoreboard (Using {@link #initScoreboard})
-             I. UHC (title)
+             I. fun.kaituo.uhc.UHC (title)
              II. >---------------< [9]
              III. Players remain: 10 [8]
              IV. (empty line) [7]
@@ -64,9 +65,9 @@ import static fun.kaituo.GameUtils.*;
      3. Check if end (Using {@code @EventHandler{@link #onPlayerDies}} and time limit)
  */
 
-public class UHCGame extends fun.kaituo.Game implements Listener, CommandExecutor {
+public class UHCGame extends Game implements Listener, CommandExecutor {
     //singleton
-    private static final UHCGame instance = new UHCGame((UHC) Bukkit.getPluginManager().getPlugin("UHC"));
+    private static final UHCGame instance = new UHCGame((UHC) Bukkit.getPluginManager().getPlugin("fun.kaituo.uhc.UHC"));
     public static UHCGame getInstance() {
         return instance;
     }
@@ -77,61 +78,8 @@ public class UHCGame extends fun.kaituo.Game implements Listener, CommandExecuto
         this.plugin = plugin;
         players = UHC.players;
         this.scoreboard = Objects.requireNonNull(Bukkit.getScoreboardManager()).getNewScoreboard();
-        initializeGame(plugin, "UHC", AQUA+"UHC", new Location(world, 10000, 40, 10000), new BoundingBox());
-        initializeGameRunnable(
-                new BukkitRunnable() {
-                    //for new architecture
-                    final List<Player> players = UHCGame.getInstance().players;
-
-                    @Override
-                    public void run() {
-                        this.players.addAll(getPlayersNearHub(10,10,10));
-                        if (players.size() < 2) {
-                            players.forEach(p -> p.sendMessage(RED+"人数少于2人，无法开始游戏！"));
-                            players.clear();
-                            alive.clear();
-                        } else {
-                            //single player or team mode
-                            if (!((Powerable)new Location(world, 10000, 41, 9998).getBlock().getBlockData()).isPowered()) {
-                                mode = SINGLE_PLAYER_MODE;
-                                //start game
-                                mainLogic();
-                            } else {
-                                mode = TEAM_MODE;
-                                //random teaming or manual teaming
-                                if (!((Powerable)new Location(world, 9989, 38, 10000).getBlock().getBlockData()).isPowered()) {
-                                    //random
-                                    if (players.size() < 6) {
-                                        players.forEach((p) -> p.sendMessage(RED+"人数少于6人，无法随机分队！"));
-                                    } else {
-                                        for (int i = 0; i < players.size() / 3.0; i++) {
-                                            teams.add(randomNewTeam());
-                                        }
-                                        List<Player> playersClone = new ArrayList<>(players);
-                                        for (Team t: teams) {
-                                            for (int i = 0; i < 3; i++) {
-                                                Player entry = playersClone.get(random.nextInt(playersClone.size()));
-                                                playersClone.remove(entry);
-                                                t.addEntry(entry.getName());
-                                            }
-                                        }
-                                        //start game
-                                        mainLogic();
-                                    }
-                                } else {
-                                    //manual
-                                    if (teams.size() < 2) {
-                                        players.forEach(p -> p.sendMessage(RED + "没有选择超过2个队伍！"));
-                                    } else {
-                                        //start game
-                                        mainLogic();
-                                    }
-                                }
-                            }
-
-                        }
-                    }
-                });
+        initializeGame(plugin, "fun.kaituo.uhc.UHC", AQUA+"fun.kaituo.uhc.UHC", new Location(world, 10000, 40, 10000), new BoundingBox());
+        initializeGameRunnable();
         initializeButtons(new Location(world, 10000, 41, 10002), BlockFace.NORTH,
                 new Location(world, 9998, 41, 10002), BlockFace.EAST);
         initCustomRecipe();
@@ -198,7 +146,56 @@ public class UHCGame extends fun.kaituo.Game implements Listener, CommandExecuto
         taskIds.add(Bukkit.getScheduler().scheduleSyncDelayedTask(plugin, () -> players.forEach((p) -> p.sendMessage(" " + YELLOW + "5分钟后将强制结束游戏！届时所有存活玩家都会成为胜利者！")), 66000));
         taskIds.add(Bukkit.getScheduler().scheduleSyncDelayedTask(plugin, this::endGame, 72000));
     }
-
+    @Override
+    protected void initializeGameRunnable() {
+        gameRunnable = () -> {
+            final List<Player> players = UHCGame.getInstance().players;
+            this.players.addAll(getPlayersNearHub(10,10,10));
+            if (players.size() < 2) {
+                players.forEach(p -> p.sendMessage(RED+"人数少于2人，无法开始游戏！"));
+                players.clear();
+                alive.clear();
+            } else {
+                //single player or team mode
+                if (!((Powerable)new Location(world, 10000, 41, 9998).getBlock().getBlockData()).isPowered()) {
+                    mode = SINGLE_PLAYER_MODE;
+                    //start game
+                    mainLogic();
+                } else {
+                    mode = TEAM_MODE;
+                    //random teaming or manual teaming
+                    if (!((Powerable)new Location(world, 9989, 38, 10000).getBlock().getBlockData()).isPowered()) {
+                        //random
+                        if (players.size() < 6) {
+                            players.forEach((p) -> p.sendMessage(RED+"人数少于6人，无法随机分队！"));
+                        } else {
+                            for (int i = 0; i < players.size() / 3.0; i++) {
+                                teams.add(randomNewTeam());
+                            }
+                            List<Player> playersClone = new ArrayList<>(players);
+                            for (Team t: teams) {
+                                for (int i = 0; i < 3; i++) {
+                                    Player entry = playersClone.get(random.nextInt(playersClone.size()));
+                                    playersClone.remove(entry);
+                                    t.addEntry(entry.getName());
+                                }
+                            }
+                            //start game
+                            mainLogic();
+                        }
+                    } else {
+                        //manual
+                        if (teams.size() < 2) {
+                            players.forEach(p -> p.sendMessage(RED + "没有选择超过2个队伍！"));
+                        } else {
+                            //start game
+                            mainLogic();
+                        }
+                    }
+                }
+            }
+        };
+    }
     //handle player modes, spawn, effects and teleport
     private void spreadPlayers(Player p) {
         p.setGameMode(GameMode.SURVIVAL);
@@ -552,7 +549,7 @@ public class UHCGame extends fun.kaituo.Game implements Listener, CommandExecuto
             if (args.length != 1) {
                 return false;
             }
-            if (args[0].equals("UHC")) {
+            if (args[0].equals("fun.kaituo.uhc.UHC")) {
                 endGame();
                 return true;
             }
@@ -671,7 +668,7 @@ public class UHCGame extends fun.kaituo.Game implements Listener, CommandExecuto
     private final String BORDER_PREFIX = "  " + RED + "边界大小：" + GREEN;
 
     private void initScoreboard(Objective o) {
-        o.setDisplayName(BOLD.toString() + GOLD + BOLD + "UHC"); //UHC
+        o.setDisplayName(BOLD.toString() + GOLD + BOLD + "fun.kaituo.uhc.UHC"); //fun.kaituo.uhc.UHC
         o.getScore(DARK_GRAY + ">---------------<").setScore(9); //>---------------<
         switch (mode) {
             case SINGLE_PLAYER_MODE:
@@ -731,8 +728,8 @@ public class UHCGame extends fun.kaituo.Game implements Listener, CommandExecuto
     }
 
     private void registerScoreboard() {
-        scoreboard.registerNewObjective("uhcMain", "dummy", "UHC").setDisplaySlot(DisplaySlot.SIDEBAR);
-        scoreboard.registerNewObjective("uhcKills", "playerKillCount", "UHC Kills").setDisplaySlot(DisplaySlot.PLAYER_LIST);
+        scoreboard.registerNewObjective("uhcMain", "dummy", "fun.kaituo.uhc.UHC").setDisplaySlot(DisplaySlot.SIDEBAR);
+        scoreboard.registerNewObjective("uhcKills", "playerKillCount", "fun.kaituo.uhc.UHC Kills").setDisplaySlot(DisplaySlot.PLAYER_LIST);
     }
 
     private void unregisterScoreboard() {
