@@ -279,21 +279,24 @@ public class UHCGame extends Game implements Listener, CommandExecutor {
         players.clear();
         alive.clear();
         teams.clear();
-        Bukkit.broadcastMessage("unload " + uhcWorld.getName() + " 结果为 " + Bukkit.unloadWorld(uhcWorld, false));
-
         reloadScoreboard();
         gameUUID = null;
-        placeStartButton();
-        try {
-            FileUtils.deleteDirectory(new File("uhc"));
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-        List<Integer> taskIdsCopy = new ArrayList<>(taskIds);
-        taskIds.clear();
-        for (int i : taskIdsCopy) {
-            Bukkit.getScheduler().cancelTask(i);
-        }
+
+        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            Bukkit.broadcastMessage("unload " + uhcWorld.getName() + " 结果为 " + Bukkit.unloadWorld(uhcWorld, false));
+            placeStartButton();
+            try {
+                FileUtils.deleteDirectory(new File("uhc"));
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+            List<Integer> taskIdsCopy = new ArrayList<>(taskIds);
+            taskIds.clear();
+            for (int i : taskIdsCopy) {
+                Bukkit.getScheduler().cancelTask(i);
+            }
+        }, 20);
+
     }
 
     //events related
