@@ -229,7 +229,7 @@ public class UHCGame extends Game implements Listener, CommandExecutor {
         uhcWorld.setDifficulty(Difficulty.HARD);
         uhcWorld.setPVP(false);
         uhcWorld.setGameRule(GameRule.NATURAL_REGENERATION, false);
-        uhcWorld.setGameRule(GameRule.DO_IMMEDIATE_RESPAWN, false);
+        uhcWorld.setGameRule(GameRule.DO_IMMEDIATE_RESPAWN, true);
         uhcWorld.setGameRule(GameRule.KEEP_INVENTORY, false);
         uhcWorld.setGameRule(GameRule.SHOW_DEATH_MESSAGES, false);
         uhcWorld.setGameRule(GameRule.DO_DAYLIGHT_CYCLE, true);
