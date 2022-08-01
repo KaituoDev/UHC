@@ -9,7 +9,7 @@
     <version>1.0</version>
     <packaging>jar</packaging>
 
-    <name>fun.kaituo.uhc.UHC</name>
+    <name>UHC</name>
 
     <properties>
         <java.version>17</java.version>
